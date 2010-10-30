@@ -1,0 +1,79 @@
+minidb - A simple SQLite3 store for Python objects
+==================================================
+
+minidb is a Python module that utilizes the SQLite3 database library in order
+to store and retrieve Python objects. It utilizes Python's __slots__ mechanism
+to determine the column names, and uses the class name for table names. Data is
+always stored as text in the database, but will be converted using the type
+specified in __slots__ (which therefore has to be a dict).
+
+
+A very basic example
+--------------------
+
+let's define a "Person" object having an ID (that's not a requirement, but we
+use it for good measure) and a name:
+
+    >>> class Person(object):
+    >>>    __slots__ = {'id': int, 'name': str}
+
+The minidb.Store class represents our database. By default, it uses an
+in-memory database, but you can pass a filename to its constructor to persist
+the data to a file:
+
+    >>> import minidb
+    >>> db = minidb.Store('persons.db')
+
+We can now simply create a person object and store it in the database (note
+that you can write an __init__ method, but you don't have to, and it won't be
+used by minidb when retrieving data from the database):
+
+    >>> john = Person()
+    >>> john.id = 42
+    >>> john.name = "John"
+    >>> db.save(john)
+
+You should commit and close the DB after using it:
+
+    >>> db.commit()
+    >>> db.close()
+
+Let's have a look at the "persons.db" file with the "sqlite3" command-line
+utility and inspect what minidb has created:
+
+    sqlite> .schema
+    CREATE TABLE Person (id TEXT, name TEXT);
+
+Looks good (as already mentioned, the data type in the table will always be
+TEXT, and minidb takes care of converting the data during load/save). And this
+is the data that's currently stored in the database:
+
+    sqlite> SELECT * FROM Person;
+    42|John
+
+Loading data works similarly. Let's start fresh (assuming the "Person" class
+will be defined as above) and load the stored Person:
+
+    >>> db = minidb.Store('persons.db')
+    >>> db.load(person)
+    [<__main__.Person object at 0x7fa17a52d210>]
+    >>> [(p.id, p.name) for p in db.load(Person)]
+    [(42, 'John')]
+
+You can have a look at the API documentation using the "pydoc" command line
+utility or "help" in the interactive shell:
+
+    >>> help(minidb.Store)
+
+See the file "minidb.py" for some examples on what you can do with minidb.
+
+
+Remarks
+-------
+
+The initial idea code for this project was code-named "ORM wie eine
+Kirchenmaus" and released on 2009-11-29.
+
+--
+Thomas Perl <m@thp.io>; 2010-10-30
+
