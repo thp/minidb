@@ -94,8 +94,10 @@ class Store(object):
 
     def convert(self, v):
         """Convert a value to its string representation"""
-        if isinstance(v, str) or isinstance(v, unicode):
+        if isinstance(v, unicode):
             return v
+        elif isinstance(v, str):
+            return v.decode('utf-8')
         else:
             return str(v)
 
