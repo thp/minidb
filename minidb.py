@@ -25,7 +25,7 @@
 from __future__ import with_statement
 
 __author__ = 'Thomas Perl <m@thp.io>'
-__version__ = '1.0'
+__version__ = '1.1'
 __website__ = 'http://thp.io/2010/minidb/'
 __license__ = 'ISC'
 
@@ -74,6 +74,7 @@ class Store(object):
     def close(self):
         """Close the underlying database file"""
         with self.lock:
+            self.db.execute('VACUUM')
             self.db.close()
 
     def _register(self, class_):
