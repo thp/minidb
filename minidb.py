@@ -1,4 +1,3 @@
-#!/usr/bin/python
 # -*- coding: utf-8 -*-
 #
 # minidb - A simple SQLite3 store for Python objects
@@ -21,34 +20,24 @@
 
 """A simple SQLite3 store for Python objects"""
 
-# For Python 2.5, we need to request the "with" statement
-from __future__ import with_statement
-
 __author__ = 'Thomas Perl <m@thp.io>'
 __version__ = '1.1'
 __website__ = 'http://thp.io/2010/minidb/'
 __license__ = 'ISC'
 
-try:
-    import sqlite3.dbapi2 as sqlite
-except ImportError:
-    try:
-        from pysqlite2 import dbapi2 as sqlite
-    except ImportError:
-        raise Exception('Please install SQLite3 support.')
-
+import sqlite3.dbapi2 as sqlite
 
 import threading
 import inspect
-import itertools
 import functools
 import types
+import collections
 
 
 def _get_all_slots(class_, include_private=False):
-    for clazz in inspect.getmro(class_):
+    for clazz in reversed(inspect.getmro(class_)):
         if hasattr(clazz, '__slots__'):
-            for name, type_ in clazz.__slots__.iteritems():
+            for name, type_ in clazz.__slots__.items():
                 if include_private or not name.startswith('_'):
                     yield (name, type_)
 
@@ -56,8 +45,6 @@ def _set_attribute(o, slot, cls, value):
     # Set a slot on the given object to value, doing a cast if
     # necessary. The value None is special-cased and never cast.
     if value is not None:
-        if isinstance(value, unicode):
-            value = value.decode('utf-8')
         value = cls(value)
     setattr(o, slot, value)
 
@@ -93,11 +80,11 @@ class Store(object):
     def _execute(self, sql, args=None):
         if args is None:
             if self.debug:
-                print '    :', sql
+                print('    :', sql)
             return self.db.execute(sql)
         else:
             if self.debug:
-                print '    :', sql, args
+                print('    :', sql, args)
             return self.db.execute(sql, args)
 
     def _schema(self, class_):
@@ -124,7 +111,7 @@ class Store(object):
             def column(name, type_):
                 if is_model and (name, type_) == self.PRIMARY_KEY:
                     return 'id INTEGER PRIMARY KEY'
-                elif type_ in (int, long):
+                elif type_ in (int,):
                     return '{name} INTEGER'.format(name=name)
                 elif type_ in (float,):
                     return '{name} REAL'.format(name=name)
@@ -153,9 +140,9 @@ class Store(object):
 
     def convert(self, v):
         """Convert a value to its string representation"""
-        if isinstance(v, unicode):
+        if isinstance(v, str):
             return v
-        elif isinstance(v, str):
+        elif isinstance(v, bytes):
             return v.decode('utf-8')
         else:
             return str(v)
@@ -274,11 +261,7 @@ class Store(object):
             sql = 'DELETE FROM %s' % (table,)
             if kwargs:
                 sql += ' WHERE %s' % (' AND '.join('%s=?' % k for k in kwargs))
-            try:
-                self._execute(sql, kwargs.values())
-                return True
-            except Exception, e:
-                return False
+            return self._execute(sql, kwargs.values()).rowcount > 0
 
     def remove(self, o):
         """Delete objects by template object
@@ -392,13 +375,13 @@ class Store(object):
                 sql_args = aargs
             elif kwargs:
                 sql += ' WHERE %s' % (' AND '.join('%s=?' % k for k in kwargs))
-                sql_args = kwargs.values()
+                sql_args = list(kwargs.values())
             else:
                 sql_args = []
             cur = self._execute(sql, sql_args)
             def apply(row):
-                d = dict(zip((name for name, type_ in slots), row))
-                kwargs = {k: v for k, v in d.iteritems() if v is not None}
+                row = zip((name for name, type_ in slots), row)
+                kwargs = {k: v for k, v in row if v is not None}
                 if issubclass(class_, Model):
                     o = class_(*args, **kwargs)
                     setattr(o, self.MINIDB_ATTR, self)
@@ -408,7 +391,7 @@ class Store(object):
                         _set_attribute(o, name, type_, value)
 
                 return o
-            return filter(lambda x: x is not None, [apply(row) for row in cur])
+            return (x for x in (apply(row) for row in cur) if x is not None)
 
     def get(self, class_, *args, **kwargs):
         """Load one object of a given class
@@ -421,11 +404,7 @@ class Store(object):
         arguments to select the object (i.e. using a
         unique set of attributes to retrieve it).
         """
-        result = self.load(class_, *args, **kwargs)
-        if result:
-            return result[0]
-        else:
-            return None
+        return next(self.load(class_, *args, **kwargs), None)
 
 
 class Operation(object):
@@ -617,9 +596,21 @@ class Columns(object):
         if name in d:
             return Column(self._class, name, d[name])
 
+def model_init(self, *args, **kwargs):
+    for key, type_ in _get_all_slots(self.__class__, include_private=True):
+        _set_attribute(self, key, type_, kwargs.get(key, None))
+
+    # Call redirected constructor
+    if '__minidb_init__' in self.__class__.__dict__:
+        getattr(self, '__minidb_init__')(*args)
+
 
 class ClassAttributesAsSlotsMeta(type):
     """Metaclass that turns class attributes into __slots__, and renames __init__ to __minidb_init__"""
+
+    @classmethod
+    def __prepare__(metacls, name, bases):
+        return collections.OrderedDict()
 
     def __new__(mcs, name, bases, d):
         if bases != (object,):
@@ -628,16 +619,17 @@ class ClassAttributesAsSlotsMeta(type):
             if '__init__' in d:
                 d['__minidb_init__'] = d['__init__']
                 del d['__init__']
+                d['__init__'] = model_init
 
-        slots = {k: v for k, v in d.iteritems()
+        slots = collections.OrderedDict((k, v) for k, v in d.items()
                  if k.lower() == k and
                  not k.startswith('__') and
                  not isinstance(v, types.FunctionType) and
                  not isinstance(v, property) and
                  not isinstance(v, staticmethod) and
-                 not isinstance(v, classmethod)}
+                 not isinstance(v, classmethod))
 
-        keep = {k: v for k, v in d.iteritems() if k not in slots}
+        keep = collections.OrderedDict((k, v) for k, v in d.items() if k not in slots)
         keep['__slots__'] = slots
 
         columns = Columns(name, slots)
@@ -647,18 +639,13 @@ class ClassAttributesAsSlotsMeta(type):
         columns._class = result
         return result
 
-class Model(object):
-    __metaclass__ = ClassAttributesAsSlotsMeta
 
+class Model(metaclass=ClassAttributesAsSlotsMeta):
     id = int
     _minidb = Store
 
-    def __init__(self, *args, **kwargs):
-        for key, type_ in _get_all_slots(self.__class__, include_private=True):
-            _set_attribute(self, key, type_, kwargs.get(key, None))
-        # Call redirected constructor
-        if hasattr(self, '__minidb_init__'):
-            getattr(self, '__minidb_init__')(*args)
+    def __init__(self):
+        pass
 
     def __repr__(self):
         def get_attrs():
@@ -675,7 +662,7 @@ class Model(object):
     def load(cls, db, query=None, **kwargs):
         if query is not None:
             kwargs['__query__'] = query
-        if hasattr(cls, '__minidb_init__'):
+        if '__minidb_init__' in cls.__dict__:
             @functools.wraps(cls.__minidb_init__)
             def init_wrapper(*args):
                 return db.load(cls, *args, **kwargs)
@@ -687,7 +674,7 @@ class Model(object):
     def get(cls, db, query=None, **kwargs):
         if query is not None:
             kwargs['__query__'] = query
-        if hasattr(cls, '__minidb_init__'):
+        if '__minidb_init__' in cls.__dict__:
             @functools.wraps(cls.__minidb_init__)
             def init_wrapper(*args):
                 return db.get(cls, *args, **kwargs)
