@@ -25,6 +25,10 @@ __version__ = '1.1'
 __website__ = 'http://thp.io/2010/minidb/'
 __license__ = 'ISC'
 
+
+__all__ = ['Store', 'Model', 'UnknownClass', 'columns', 'func', 'literal']
+
+
 import sqlite3
 import threading
 import inspect
@@ -107,13 +111,13 @@ class Store(object):
             self._execute('VACUUM')
             self.db.close()
 
-    def _ensure_schema(self, table, slots, is_model):
+    def _ensure_schema(self, table, slots):
         with self.lock:
             cur = self._execute('PRAGMA table_info(%s)' % table)
             available = cur.fetchall()
 
             def column(name, type_):
-                if is_model and (name, type_) == self.PRIMARY_KEY:
+                if (name, type_) == self.PRIMARY_KEY:
                     return 'id INTEGER PRIMARY KEY'
                 elif type_ in (int,):
                     return '{name} INTEGER'.format(name=name)
@@ -132,13 +136,16 @@ class Store(object):
                     for name, type_ in slots)))
 
     def register(self, class_):
+        if not issubclass(class_, Model):
+            raise TypeError('%s is not a subclass of minidb.Model', class_.__name__)
+
         if class_ in self.registered:
             return class_
 
         with self.lock:
             self.registered.append(class_)
             table, slots = self._schema(class_)
-            self._ensure_schema(table, slots, issubclass(class_, Model))
+            self._ensure_schema(table, slots)
 
         return class_
 
@@ -387,13 +394,8 @@ class Store(object):
             def apply(row):
                 row = zip((name for name, type_ in slots), row)
                 kwargs = {k: v for k, v in row if v is not None}
-                if issubclass(class_, Model):
-                    o = class_(*args, **kwargs)
-                    setattr(o, self.MINIDB_ATTR, self)
-                else:
-                    o = class_.__new__(class_)
-                    for (name, type_), value in zip(slots, row):
-                        _set_attribute(o, name, type_, value)
+                o = class_(*args, **kwargs)
+                setattr(o, self.MINIDB_ATTR, self)
 
                 return o
             return (x for x in (apply(row) for row in cur) if x is not None)
@@ -496,13 +498,6 @@ class Operation(object):
         return '{a!r} {op} {b!r}'.format(**self.__dict__)
 
 
-def and_(*args):
-    return reduce(lambda a, b: Operation(a, 'AND', b, True), args)
-
-
-def or_(*args):
-    return reduce(lambda a, b: Operation(a, 'OR', b, True), args)
-
 class Sequence(object):
     def __init__(self, args):
         self.args = args
@@ -518,6 +513,10 @@ class Sequence(object):
         return self
 
 def columns(*args):
+    """columns(a, b, c) -> a // b // c
+
+    Query multiple columns, like the // column sequence operator.
+    """
     return Sequence(args)
 
 class func(object):
@@ -567,12 +566,23 @@ class OperatorMixin(object):
     trim = property(lambda a: Function('trim', a))
     count = property(lambda a: Function('count', a))
 
+
 class Literal(OperatorMixin):
     def __init__(self, name):
         self.name = name
 
+    def __repr__(self):
+        return self.name
+
+
 def literal(name):
+    """Insert a literal as-is into a SQL query
+
+    >>> func.count(literal('*'))
+    count(*)
+    """
     return Literal(name)
+
 
 class Function(OperatorMixin):
     def __init__(self, name, *args):
@@ -603,6 +613,7 @@ class Columns(object):
         d = {k: v for k, v in _get_all_slots(self._class, include_private=True)}
         if name in d:
             return Column(self._class, name, d[name])
+
 
 def model_init(self, *args, **kwargs):
     for key, type_ in _get_all_slots(self.__class__, include_private=True):
