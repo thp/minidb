@@ -33,12 +33,17 @@ import types
 import collections
 
 
+class UnknownClass(TypeError):
+    ...
+
+
 def _get_all_slots(class_, include_private=False):
     for clazz in reversed(inspect.getmro(class_)):
         if hasattr(clazz, '__slots__'):
             for name, type_ in clazz.__slots__.items():
                 if include_private or not name.startswith('_'):
                     yield (name, type_)
+
 
 def _set_attribute(o, slot, cls, value):
     # Set a slot on the given object to value, doing a cast if
@@ -88,7 +93,7 @@ class Store(object):
 
     def _schema(self, class_):
         if class_ not in self.registered:
-            raise TypeError('{} was never registered'.format(class_))
+            raise UnknownClass('{} was never registered'.format(class_))
         return (class_.__name__, list(sorted(_get_all_slots(class_))))
 
     def commit(self):

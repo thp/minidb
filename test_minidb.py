@@ -1,4 +1,5 @@
 import minidb
+from nose.tools import *
 
 
 class FieldTest(minidb.Model):
@@ -79,5 +80,12 @@ def test_loading_objects():
         assert next(FieldTest.c.id.count.query(db)) == (100,)
 
         for field_test in FieldTest.load(db)(997):
-            print(field_test)
+            assert field_test.id is not None
+            assert field_test._private1 == 997
+
+
+@raises(minidb.UnknownClass)
+def test_saving_without_registration_fails():
+    with minidb.Store(autoregister=False, debug=True) as db:
+        FieldTest(9).save(db)
 
