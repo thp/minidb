@@ -89,6 +89,7 @@ def test_saving_without_registration_fails():
     with minidb.Store(autoregister=False, debug=True) as db:
         FieldTest(9).save(db)
 
+
 @raises(TypeError)
 def test_registering_non_subclass_of_model_fails():
     # This cannot be registered, as it's not a subclass of minidb.Model
@@ -98,3 +99,8 @@ def test_registering_non_subclass_of_model_fails():
     with minidb.Store(autoregister=False, debug=True) as db:
         db.register(Something)
 
+
+@raises(KeyError)
+def test_invalid_keyword_arguments_fails():
+    with minidb.Store(autoregister=False, debug=True) as db:
+        FieldTest(9, this_is_not_an_attribute=123).save(db)

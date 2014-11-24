@@ -74,7 +74,7 @@ with minidb.Store(autoregister=False, debug=True) as db:
     db.register(WithoutConstructor)
     db.register(AdvancedPerson)
 
-    AdvancedPerson().save(db)
+    AdvancedPerson(username='advanced', mail='a@example.net').save(db)
 
     for aperson in AdvancedPerson.load(db):
         print(aperson)

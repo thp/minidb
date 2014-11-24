@@ -635,7 +635,12 @@ class Columns(object):
 
 
 def model_init(self, *args, **kwargs):
-    for key, type_ in _get_all_slots(self.__class__, include_private=True):
+    slots = list(_get_all_slots(self.__class__, include_private=True))
+    unmatched_kwargs = set(kwargs.keys()).difference(set(key for key, type_ in slots))
+    if unmatched_kwargs:
+        raise KeyError('Invalid keyword argument(s): %r' % unmatched_kwargs)
+
+    for key, type_ in slots:
         _set_attribute(self, key, type_, kwargs.get(key, None))
 
     # Call redirected constructor
