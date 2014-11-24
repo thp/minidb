@@ -77,7 +77,7 @@ def test_loading_objects():
         for i in range(100):
             FieldTest(i).save(db)
 
-        assert next(FieldTest.c.id.count.query(db)) == (100,)
+        assert next(FieldTest.c.id.count('count').query(db)).count == 100
 
         for field_test in FieldTest.load(db)(997):
             assert field_test.id is not None

@@ -57,6 +57,28 @@ def _set_attribute(o, slot, cls, value):
     setattr(o, slot, value)
 
 
+class RowProxy(object):
+    def __init__(self, row, keys):
+        self._row = row
+        self._keys = keys
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            return self._row[self._keys.index(key)]
+
+        return self._row[key]
+
+    def __getattr__(self, attr):
+        return self[attr]
+
+    def __repr__(self):
+        return repr(self._row)
+
+    def keys(self):
+        return self._keys
+
+
+
 class Store(object):
     PRIMARY_KEY = ('id', int)
     MINIDB_ATTR = '_minidb'
@@ -316,7 +338,7 @@ class Store(object):
             sql = 'DELETE FROM %s WHERE %s' % (table, ssql)
             return self._execute(sql, args).rowcount
 
-    def query(self, class_, select, where=None, order_by=None, limit=None, as_dict=False):
+    def query(self, class_, select, where=None, order_by=None, limit=None):
         with self.lock:
             if self.autoregister:
                 self.register(class_)
@@ -357,11 +379,8 @@ class Store(object):
             sql = ' '.join(sql)
 
             result = self._execute(sql, args)
-            if as_dict:
-                columns = [d[0] for d in result.description]
-                return (dict(zip(columns, row)) for row in result)
-
-            return (row for row in result)
+            columns = [d[0] for d in result.description]
+            return (RowProxy(row, columns) for row in result)
 
     def load(self, class_, *args, **kwargs):
         """Load objects of a given class
@@ -421,7 +440,7 @@ class Operation(object):
         self.b = b
         self.brackets = brackets
 
-    def query(self, db, order_by=None, limit=None, as_dict=False):
+    def query(self, db, order_by=None, limit=None):
         if isinstance(self.a, Column):
             class_ = self.a.class_
         elif isinstance(self.a, Function):
@@ -431,7 +450,7 @@ class Operation(object):
         else:
             raise ValueError('Cannot determine class for query')
 
-        return class_.query(db, self, order_by=order_by, limit=limit, as_dict=as_dict)
+        return class_.query(db, self, order_by=order_by, limit=limit)
 
     def __floordiv__(self, other):
         if self.b is not None:
@@ -505,8 +524,8 @@ class Sequence(object):
     def tosql(self):
         return Operation(self).tosql()
 
-    def query(self, db, order_by=None, limit=None, as_dict=False):
-        return Operation(self).query(db, order_by=order_by, limit=limit, as_dict=as_dict)
+    def query(self, db, order_by=None, limit=None):
+        return Operation(self).query(db, order_by=order_by, limit=limit)
 
     def __floordiv__(self, other):
         self.args.append(other)
@@ -544,8 +563,8 @@ class OperatorMixin(object):
 
     __call__ = lambda a, name: Operation(a, 'AS %s' % name)
     tosql = lambda a: Operation(a).tosql()
-    query = lambda a, db, order_by=None, limit=None, as_dict=False: Operation(a).query(db,
-            order_by=order_by, limit=limit, as_dict=as_dict)
+    query = lambda a, db, order_by=None, limit=None: Operation(a).query(db,
+            order_by=order_by, limit=limit)
     __floordiv__ = lambda a, b: Sequence([a, b])
 
     like = lambda a, b: Operation(a, 'LIKE', b)
@@ -720,5 +739,5 @@ class Model(metaclass=ClassAttributesAsSlotsMeta):
         return db.delete_where(cls, query)
 
     @classmethod
-    def query(cls, db, select, where=None, order_by=None, limit=None, as_dict=False):
-        return db.query(cls, select, where=where, order_by=order_by, limit=limit, as_dict=as_dict)
+    def query(cls, db, select, where=None, order_by=None, limit=None):
+        return db.query(cls, select, where=where, order_by=order_by, limit=limit)

@@ -141,6 +141,14 @@ with minidb.Store(autoregister=False, debug=True) as db:
     print(person._not_persisted)
     person.save()
 
+    print('RowProxy')
+    for row in Person.query(db, Person.c.username // Person.c.foo):
+        print('Repr:', row)
+        print('Attribute access:', row.username, row.foo)
+        print('Key access:', row['username'], row['foo'])
+        print('Index access:', row[0], row[1])
+        print('As dict:', dict(row))
+
     print('select with query builder')
     print('columns:', Person.c)
     query = (Person.c.id < 1000) & Person.c.username.like('%foo%') & (Person.c.username != None)
@@ -166,37 +174,35 @@ with minidb.Store(autoregister=False, debug=True) as db:
     print('queries')
     print('='*30)
 
-    highest_id = next(Person.query(db, Person.c.id.max('max'), as_dict=True))['max']
+    highest_id = next(Person.query(db, Person.c.id.max('max'))).max
     print('highest id:', highest_id)
 
-    average_age = next(WithoutConstructor.query(db, WithoutConstructor.c.age.avg('average')))
+    average_age = next(WithoutConstructor.query(db, WithoutConstructor.c.age.avg('average'))).average
     print('average age:', average_age)
 
     all_ages = list(WithoutConstructor.c.age.query(db, order_by=WithoutConstructor.c.age.desc))
     print('all ages:', all_ages)
 
-    average_age = next(WithoutConstructor.c.age.avg('average').query(db, limit=1))
+    average_age = next(WithoutConstructor.c.age.avg('average').query(db, limit=1)).average
     print('average age (direct query):', average_age)
 
     print('multi-column query:')
     for row in WithoutConstructor.query(db, minidb.columns(WithoutConstructor.c.age,
                                                            WithoutConstructor.c.height),
                                                            order_by=WithoutConstructor.c.age.desc,
-                                                           limit=50,
-                                                           as_dict=True):
-        print('got:', row)
+                                                           limit=50):
+        print('got:', dict(row))
 
     print('multi-column query (direct)')
-    print(list(minidb.columns(WithoutConstructor.c.age,
+    print([dict(x) for x in minidb.columns(WithoutConstructor.c.age,
                               WithoutConstructor.c.height).query(db,
-                              order_by=WithoutConstructor.c.height.desc,
-                              as_dict=True)))
+                              order_by=WithoutConstructor.c.height.desc)])
 
     print('order by multiple with then')
-    print(list(WithoutConstructor.c.age.query(db, order_by=WithoutConstructor.c.height.asc // WithoutConstructor.c.age.desc, as_dict=True)))
+    print(list(WithoutConstructor.c.age.query(db, order_by=WithoutConstructor.c.height.asc // WithoutConstructor.c.age.desc)))
 
     print('order by shortcut with late-binding column lambda as dictionary')
-    print(list(WithoutConstructor.c.age.query(db, order_by=lambda c: c.height.asc // c.age.desc, as_dict=True)))
+    print(list(WithoutConstructor.c.age.query(db, order_by=lambda c: c.height.asc // c.age.desc)))
 
     print('multiple columns with // and as tuple')
     for age, height in (WithoutConstructor.c.age // WithoutConstructor.c.height).query(db):
