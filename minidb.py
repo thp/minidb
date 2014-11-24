@@ -139,7 +139,9 @@ class Store(object):
 
     def convert(self, v):
         """Convert a value to its string representation"""
-        if isinstance(v, str):
+        if v is None:
+            return None
+        elif isinstance(v, str):
             return v
         elif isinstance(v, bytes):
             return v.decode('utf-8')
