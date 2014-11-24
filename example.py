@@ -49,6 +49,12 @@ class Person(minidb.Model):
         print('new value:', new)
 
 
+class AdvancedPerson(Person):
+    advanced_x = float
+    advanced_y = float
+
+
+
 class WithoutConstructor(minidb.Model):
     name = str
     age = int
@@ -66,6 +72,12 @@ class FooObject(object):
 with minidb.Store(autoregister=False, debug=True) as db:
     db.register(Person)
     db.register(WithoutConstructor)
+    db.register(AdvancedPerson)
+
+    AdvancedPerson().save(db)
+
+    for aperson in AdvancedPerson.load(db):
+        print(aperson)
 
     for i in range(5):
         w = WithoutConstructor(name='x', age=10+3*i)

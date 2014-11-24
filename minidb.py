@@ -98,7 +98,7 @@ class Store(object):
     def _schema(self, class_):
         if class_ not in self.registered:
             raise UnknownClass('{} was never registered'.format(class_))
-        return (class_.__name__, list(sorted(_get_all_slots(class_))))
+        return (class_.__name__, list(_get_all_slots(class_)))
 
     def commit(self):
         """Commit changes into the database"""
