@@ -52,7 +52,7 @@ class Store(object):
     PRIMARY_KEY = ('id', int)
     MINIDB_ATTR = '_minidb'
 
-    def __init__(self, filename=':memory:', autoregister=True, debug=False):
+    def __init__(self, filename=':memory:', autoregister=False, debug=False):
         """Create (or load) a new minidb storage
 
         Without arguments, this will create an in-memory
@@ -232,10 +232,9 @@ class Store(object):
             # If it's a Model subclass, we skip the primary key column
             skip_primary_key = isinstance(o, Model)
 
-            # Only save values that have values set (non-None values)
+            # Save all values except for the primary key
             slots = [(name, type_) for name, type_ in slots
-                     if getattr(o, name, None) is not None and
-                     (not skip_primary_key or (name, type_) != self.PRIMARY_KEY)]
+                     if not skip_primary_key or (name, type_) != self.PRIMARY_KEY]
 
             values = [self.convert(getattr(o, name)) for name, type_ in slots]
             return self._execute('INSERT INTO %s (%s) VALUES (%s)' % (table,
@@ -527,6 +526,8 @@ class func(object):
     rtrim = staticmethod(lambda a: Function('rtrim', a))
     trim = staticmethod(lambda a: Function('trim', a))
 
+    count = staticmethod(lambda a: Function('count', a))
+
 class OperatorMixin(object):
     __lt__ = lambda a, b: Operation(a, '<', b)
     __le__ = lambda a, b: Operation(a, '<=', b)
@@ -557,6 +558,7 @@ class OperatorMixin(object):
     ltrim = property(lambda a: Function('ltrim', a))
     rtrim = property(lambda a: Function('rtrim', a))
     trim = property(lambda a: Function('trim', a))
+    count = property(lambda a: Function('count', a))
 
 class Literal(OperatorMixin):
     def __init__(self, name):
