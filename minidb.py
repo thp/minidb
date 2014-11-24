@@ -25,8 +25,7 @@ __version__ = '1.1'
 __website__ = 'http://thp.io/2010/minidb/'
 __license__ = 'ISC'
 
-import sqlite3.dbapi2 as sqlite
-
+import sqlite3
 import threading
 import inspect
 import functools
@@ -62,7 +61,7 @@ class Store(object):
         database file (which will be created if it does
         not yet exist).
         """
-        self.db = sqlite.connect(filename, check_same_thread=False)
+        self.db = sqlite3.connect(filename, check_same_thread=False)
         self.debug = debug
         self.autoregister = autoregister
         self.registered = []
