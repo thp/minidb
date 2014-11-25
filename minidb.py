@@ -29,12 +29,16 @@ __license__ = 'ISC'
 __all__ = ['Store', 'Model', 'UnknownClass', 'columns', 'func', 'literal']
 
 
+DEBUG_OBJECT_CACHE = False
+
+
 import sqlite3
 import threading
 import inspect
 import functools
 import types
 import collections
+import weakref
 
 
 class UnknownClass(TypeError):
@@ -43,8 +47,8 @@ class UnknownClass(TypeError):
 
 def _get_all_slots(class_, include_private=False):
     for clazz in reversed(inspect.getmro(class_)):
-        if hasattr(clazz, '__slots__'):
-            for name, type_ in clazz.__slots__.items():
+        if hasattr(clazz, '__minidb_slots__'):
+            for name, type_ in clazz.__minidb_slots__.items():
                 if include_private or not name.startswith('_'):
                     yield (name, type_)
 
@@ -93,8 +97,8 @@ class Store(object):
         not yet exist).
         """
         self.db = sqlite3.connect(filename, check_same_thread=False)
-        self.debug = debug
         self.autoregister = autoregister
+        self.debug = debug
         self.registered = []
         self.lock = threading.RLock()
 
@@ -255,11 +259,6 @@ class Store(object):
         If you want to update an object inside the database,
         please use the "update" method instead.
         """
-        if hasattr(o, '__iter__'):
-            for child in o:
-                self.save(child)
-            return
-
         with self.lock:
             if self.autoregister:
                 self.register(o.__class__)
@@ -309,11 +308,6 @@ class Store(object):
         only. For bulk deletion based on some criteria, the
         "delete" method might be better suited.
         """
-        if hasattr(o, '__iter__'):
-            for child in o:
-                self.remove(child)
-            return
-
         with self.lock:
             if self.autoregister:
                 self.register(o.__class__)
@@ -656,13 +650,13 @@ class ClassAttributesAsSlotsMeta(type):
         return collections.OrderedDict()
 
     def __new__(mcs, name, bases, d):
-        if bases != (object,):
-            # Redirect __init__() to __minidb_init__(), but not for
-            # Model, which subclasses directly from object
-            if '__init__' in d:
-                d['__minidb_init__'] = d['__init__']
-                del d['__init__']
-                d['__init__'] = model_init
+        # Redirect __init__() to __minidb_init__()
+        if '__init__' in d:
+            d['__minidb_init__'] = d['__init__']
+        d['__init__'] = model_init
+
+        # Caching of live objects
+        d['__minidb_cache__'] = weakref.WeakValueDictionary()
 
         slots = collections.OrderedDict((k, v) for k, v in d.items()
                  if k.lower() == k and
@@ -673,7 +667,12 @@ class ClassAttributesAsSlotsMeta(type):
                  not isinstance(v, classmethod))
 
         keep = collections.OrderedDict((k, v) for k, v in d.items() if k not in slots)
-        keep['__slots__'] = slots
+        keep['__minidb_slots__'] = slots
+
+        keep['__slots__'] = tuple(slots.keys())
+        if not bases:
+            # Add weakref slot to Model (for caching)
+            keep['__slots__'] += ('__weakref__',)
 
         columns = Columns(name, slots)
         keep['c'] = columns
@@ -687,8 +686,9 @@ class Model(metaclass=ClassAttributesAsSlotsMeta):
     id = int
     _minidb = Store
 
-    def __init__(self):
-        pass
+    @classmethod
+    def _finalize(cls, id):
+        print('Finalizing {} id={}'.format(cls.__name__, id))
 
     def __repr__(self):
         def get_attrs():
@@ -702,16 +702,34 @@ class Model(metaclass=ClassAttributesAsSlotsMeta):
         }
 
     @classmethod
+    def __lookup_single(cls, o):
+        cache = cls.__minidb_cache__
+        if o.id not in cache:
+            if DEBUG_OBJECT_CACHE:
+                print('Storing id={} in cache {}'.format(o.id, o))
+                weakref.finalize(o, cls._finalize, o.id)
+            cache[o.id] = o
+        else:
+            if DEBUG_OBJECT_CACHE:
+                print('Getting id={} from cache'.format(o.id))
+        return cache[o.id]
+
+    @classmethod
+    def __lookup_cache(cls, objects):
+        for o in objects:
+            yield cls.__lookup_single(o)
+
+    @classmethod
     def load(cls, db, query=None, **kwargs):
         if query is not None:
             kwargs['__query__'] = query
         if '__minidb_init__' in cls.__dict__:
             @functools.wraps(cls.__minidb_init__)
             def init_wrapper(*args):
-                return db.load(cls, *args, **kwargs)
+                return cls.__lookup_cache(db.load(cls, *args, **kwargs))
             return init_wrapper
         else:
-            return db.load(cls, **kwargs)
+            return cls.__lookup_cache(db.load(cls, **kwargs))
 
     @classmethod
     def get(cls, db, query=None, **kwargs):
@@ -720,10 +738,10 @@ class Model(metaclass=ClassAttributesAsSlotsMeta):
         if '__minidb_init__' in cls.__dict__:
             @functools.wraps(cls.__minidb_init__)
             def init_wrapper(*args):
-                return db.get(cls, *args, **kwargs)
+                return cls.__lookup_single(db.get(cls, *args, **kwargs))
             return init_wrapper
         else:
-            return db.get(cls, **kwargs)
+            return cls.__lookup_single(db.get(cls, **kwargs))
 
     def save(self, db=None):
         if getattr(self, Store.MINIDB_ATTR, None) is None:
@@ -733,9 +751,21 @@ class Model(metaclass=ClassAttributesAsSlotsMeta):
 
         getattr(self, Store.MINIDB_ATTR).save_or_update(self)
 
+        if DEBUG_OBJECT_CACHE:
+            print('Storing id={} in cache {}'.format(self.id, self))
+            weakref.finalize(self, self.__class__._finalize, self.id)
+        self.__class__.__minidb_cache__[self.id] = self
+
     def delete(self):
         if getattr(self, Store.MINIDB_ATTR) is None:
             raise ValueError('Needs a db object')
+
+        # drop from cache
+        cache = self.__class__.__minidb_cache__
+        if self.id in cache:
+            if DEBUG_OBJECT_CACHE:
+                print('Dropping id={} from cache {}'.format(self.id, self))
+            del cache[self.id]
 
         getattr(self, Store.MINIDB_ATTR).delete_by_pk(self)
 

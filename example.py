@@ -223,3 +223,33 @@ with minidb.Store(autoregister=False, debug=True) as db:
     print('...')
     print(Person.load(db, Person.c.username.like('%'))(FooObject()))
 
+
+def cached_person_main(with_delete=None):
+    if with_delete is None:
+        for i in range(2):
+            cached_person_main(i)
+        print('='*77)
+        return
+    print('='*20, 'Cached Person Main, with_delete =', with_delete, '='*20)
+
+    debug_object_cache, minidb.DEBUG_OBJECT_CACHE = minidb.DEBUG_OBJECT_CACHE, True
+
+    class CachedPerson(minidb.Model):
+        name = str
+        age = int
+        _inst = object
+
+    with minidb.Store(debug=True) as db:
+        db.register(CachedPerson)
+        p = CachedPerson(name='foo', age=12)
+        p._inst = 123
+        p.save(db)
+        p_id = p.id
+        if with_delete:
+            del p
+        p = CachedPerson.get(db, id=p_id)
+        print('p._inst =', repr(p._inst))
+    minidb.DEBUG_OBJECT_CACHE = debug_object_cache
+
+cached_person_main()
+

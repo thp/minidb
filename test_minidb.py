@@ -72,6 +72,32 @@ def test_saving_object_stores_id():
         assert field_test.id is not None
 
 
+def test_loading_object_returns_cached_object():
+    with minidb.Store(autoregister=True, debug=True) as db:
+        field_test = FieldTest(9999)
+        field_test._private1 = 4711
+        assert field_test.id is None
+        field_test.save(db)
+        assert field_test.id is not None
+        field_test_loaded = FieldTest.get(db, id=field_test.id)(9999)
+        assert field_test_loaded._private1 == 4711
+        assert field_test_loaded is field_test
+
+
+def test_loading_object_returns_new_object_after_reference_drop():
+    with minidb.Store(autoregister=True, debug=True) as db:
+        field_test = FieldTest(9999)
+        field_test._private1 = 4711
+        assert field_test.id is None
+        field_test.save(db)
+        assert field_test.id is not None
+        field_test_id = field_test.id
+        del field_test
+
+        field_test_loaded = FieldTest.get(db, id=field_test_id)(9999)
+        assert field_test_loaded._private1 == 9999
+
+
 def test_loading_objects():
     with minidb.Store(autoregister=True, debug=True) as db:
         for i in range(100):
