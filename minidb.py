@@ -26,7 +26,7 @@ __url__ = 'http://thp.io/2010/minidb/'
 __license__ = 'ISC'
 
 
-__all__ = ['Store', 'Model', 'UnknownClass', 'columns', 'func', 'literal']
+__all__ = ['Store', 'Model', 'UnknownClass', 'columns', 'func', 'literal', 'pprint', 'pformat']
 
 
 DEBUG_OBJECT_CACHE = False
@@ -39,6 +39,7 @@ import functools
 import types
 import collections
 import weakref
+import sys
 
 
 class UnknownClass(TypeError):
@@ -332,7 +333,8 @@ class Store(object):
             sql = 'DELETE FROM %s WHERE %s' % (table, ssql)
             return self._execute(sql, args).rowcount
 
-    def query(self, class_, select, where=None, order_by=None, limit=None):
+    def query(self, class_, select=None, where=None, order_by=None,
+            group_by=None, limit=None):
         with self.lock:
             if self.autoregister:
                 self.register(class_)
@@ -341,6 +343,9 @@ class Store(object):
 
             sql = []
             args = []
+
+            if select is None:
+                select = literal('*')
 
             if isinstance(select, types.FunctionType):
                 # Late-binding of columns
@@ -365,6 +370,15 @@ class Store(object):
                 osql, oargs = order_by.tosql()
                 sql.append('ORDER BY %s' % (osql,))
                 args.extend(oargs)
+
+            if group_by is not None:
+                if isinstance(group_by, types.FunctionType):
+                    # Late-binding of columns
+                    group_by = group_by(class_.c)
+
+                gsql, gargs = group_by.tosql()
+                sql.append('GROUP BY %s' % (gsql,))
+                args.extend(gargs)
 
             if limit is not None:
                 sql.append('LIMIT ?')
@@ -434,7 +448,7 @@ class Operation(object):
         self.b = b
         self.brackets = brackets
 
-    def query(self, db, order_by=None, limit=None):
+    def query(self, db, order_by=None, group_by=None, limit=None):
         if isinstance(self.a, Column):
             class_ = self.a.class_
         elif isinstance(self.a, Function):
@@ -444,7 +458,8 @@ class Operation(object):
         else:
             raise ValueError('Cannot determine class for query')
 
-        return class_.query(db, self, order_by=order_by, limit=limit)
+        return class_.query(db, self, order_by=order_by, group_by=group_by,
+                limit=limit)
 
     def __floordiv__(self, other):
         if self.b is not None:
@@ -515,11 +530,15 @@ class Sequence(object):
     def __init__(self, args):
         self.args = args
 
+    def __repr__(self):
+        return ', '.join(repr(arg) for arg in self.args)
+
     def tosql(self):
         return Operation(self).tosql()
 
-    def query(self, db, order_by=None, limit=None):
-        return Operation(self).query(db, order_by=order_by, limit=limit)
+    def query(self, db, order_by=None, group_by=None, limit=None):
+        return Operation(self).query(db, order_by=order_by, group_by=None,
+                limit=limit)
 
     def __floordiv__(self, other):
         self.args.append(other)
@@ -557,8 +576,9 @@ class OperatorMixin(object):
 
     __call__ = lambda a, name: Operation(a, 'AS %s' % name)
     tosql = lambda a: Operation(a).tosql()
-    query = lambda a, db, order_by=None, limit=None: Operation(a).query(db,
-            order_by=order_by, limit=limit)
+    query = lambda a, db, order_by=None, group_by=None, limit=None: \
+            Operation(a).query(db, order_by=order_by, group_by=group_by,
+                    limit=limit)
     __floordiv__ = lambda a, b: Sequence([a, b])
 
     like = lambda a, b: Operation(a, 'LIKE', b)
@@ -622,6 +642,10 @@ class Columns(object):
         self._name = name
         self._slots = slots
 
+    def __repr__(self):
+        return '<{} for {} ({})>'.format(self.__class__.__name__,
+                                         self._name, ', '.join(self._slots))
+
     def __getattr__(self, name):
         d = {k: v for k, v in _get_all_slots(self._class, include_private=True)}
         if name in d:
@@ -680,6 +704,39 @@ class ClassAttributesAsSlotsMeta(type):
         result = type.__new__(mcs, name, bases, keep)
         columns._class = result
         return result
+
+
+def pformat(result, color=False):
+    def incolor(color_id, s):
+        return '\033[9%dm%s\033[0m' % (color_id, s) if sys.stdout.isatty() and color else s
+
+    inred, ingreen, inyellow, inblue = (functools.partial(incolor, x) for x in range(1, 5))
+
+    rows = list(result)
+    if not rows:
+        return '(no rows)'
+
+    def colorvalue(formatted, value):
+        if value is None:
+            return inred(formatted)
+        if isinstance(value, bool):
+            return ingreen(formatted)
+
+        return formatted
+
+    s = []
+    keys = rows[0].keys()
+    lengths = tuple(max(x) for x in zip(*[[len(str(column)) for column in row] for row in [keys]+rows]))
+    s.append(' | '.join(inyellow('%-{}s'.format(length) % key) for key, length in zip(keys, lengths)))
+    s.append('-+-'.join('-'*length for length in lengths))
+    for row in rows:
+        s.append(' | '.join(colorvalue('%-{}s'.format(length) % column, column) for column, length in zip(row, lengths)))
+    s.append('({} row(s))'.format(len(rows)))
+    return ('\n'.join(s))
+
+
+def pprint(result, color=False):
+    print(pformat(result, color))
 
 
 class Model(metaclass=ClassAttributesAsSlotsMeta):
@@ -774,5 +831,13 @@ class Model(metaclass=ClassAttributesAsSlotsMeta):
         return db.delete_where(cls, query)
 
     @classmethod
-    def query(cls, db, select, where=None, order_by=None, limit=None):
-        return db.query(cls, select, where=where, order_by=order_by, limit=limit)
+    def query(cls, db, select=None, where=None, order_by=None, group_by=None,
+            limit=None):
+        return db.query(cls, select=select, where=where, order_by=order_by,
+                group_by=group_by, limit=limit)
+
+    @classmethod
+    def pquery(cls, db, select=None, where=None, order_by=None, group_by=None,
+            limit=None, color=True):
+        pprint(db.query(cls, select=select, where=where, order_by=order_by,
+                group_by=group_by, limit=limit), color)

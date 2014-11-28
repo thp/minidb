@@ -223,6 +223,25 @@ with minidb.Store(autoregister=False, debug=True) as db:
     print('...')
     print(Person.load(db, Person.c.username.like('%'))(FooObject()))
 
+    print('Select Star')
+    print(list(Person.query(db, minidb.literal('*'))))
+
+    print('Group By')
+    print(list(Person.query(db, Person.c.username // Person.c.id.count, group_by=Person.c.username)))
+
+    print('Pretty-Printing')
+    minidb.pprint(Person.query(db, minidb.literal('*')))
+
+    print('Pretty-formatting in color')
+    print(repr(minidb.pformat(Person.query(db, Person.c.id), color=True)))
+
+    print('Pretty-Printing, in color')
+    minidb.pprint(WithoutConstructor.query(db, minidb.literal('*')), color=True)
+
+    print('Pretty-Querying with default star-select')
+    Person.pquery(db)
+
+
 
 def cached_person_main(with_delete=None):
     if with_delete is None:

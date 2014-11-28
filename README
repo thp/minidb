@@ -1,79 +1,205 @@
-minidb - A simple SQLite3 store for Python objects
-==================================================
 
-minidb is a Python module that utilizes the SQLite3 database library in order
-to store and retrieve Python objects. It utilizes Python's __slots__ mechanism
-to determine the column names, and uses the class name for table names. Data is
-always stored as text in the database, but will be converted using the type
-specified in __slots__ (which therefore has to be a dict).
+           _      _    _ _
+     _ __ (_)_ _ (_)__| | |__
+    | '  \| | ' \| / _` | '_ \
+    |_|_|_|_|_||_|_\__,_|_.__/
+    simple python object store
 
 
-A very basic example
---------------------
-
-let's define a "Person" object having an ID (that's not a requirement, but we
-use it for good measure) and a name:
-
-    >>> class Person(object):
-    >>>    __slots__ = {'id': int, 'name': str}
-
-The minidb.Store class represents our database. By default, it uses an
-in-memory database, but you can pass a filename to its constructor to persist
-the data to a file:
-
-    >>> import minidb
-    >>> db = minidb.Store('persons.db')
-
-We can now simply create a person object and store it in the database (note
-that you can write an __init__ method, but you don't have to, and it won't be
-used by minidb when retrieving data from the database):
-
-    >>> john = Person()
-    >>> john.id = 42
-    >>> john.name = "John"
-    >>> db.save(john)
-
-You should commit and close the DB after using it:
-
-    >>> db.commit()
-    >>> db.close()
-
-Let's have a look at the "persons.db" file with the "sqlite3" command-line
-utility and inspect what minidb has created:
-
-    sqlite> .schema
-    CREATE TABLE Person (id TEXT, name TEXT);
-
-Looks good (as already mentioned, the data type in the table will always be
-TEXT, and minidb takes care of converting the data during load/save). And this
-is the data that's currently stored in the database:
-
-    sqlite> SELECT * FROM Person;
-    42|John
-
-Loading data works similarly. Let's start fresh (assuming the "Person" class
-will be defined as above) and load the stored Person:
-
-    >>> db = minidb.Store('persons.db')
-    >>> db.load(person)
-    [<__main__.Person object at 0x7fa17a52d210>]
-    >>> [(p.id, p.name) for p in db.load(Person)]
-    [(42, 'John')]
-
-You can have a look at the API documentation using the "pydoc" command line
-utility or "help" in the interactive shell:
-
-    >>> help(minidb.Store)
-
-See the file "minidb.py" for some examples on what you can do with minidb.
+minidb 2 makes it easy to store Python objects in a SQLite 3 database and work
+with the data in an easy way with concise syntax.
 
 
-Remarks
--------
+Tutorial
+--------
 
-The initial idea code for this project was code-named "ORM wie eine
-Kirchenmaus" and released on 2009-11-29.
+Let's start by importing the minidb module in Python 3:
 
---
-Thomas Perl <m@thp.io>; 2010-10-30
+>>> import minidb
+
+To create a store in memory, we simply instantiate a minidb.Store, optionally
+telling it to output SQL statements as debug output:
+
+>>> db = minidb.Store(debug=True)
+
+If you want to persist into a file, simply pass in a filename as the first
+parameter when creating the minidb.Store:
+
+>>> db = minidb.Store('filename.db', debug=True)
+
+To actually store objects, we need to subclass from minidb.Model (which takes
+care of all the behind-the-scenes magic for making your class persistable, and
+adds methods for working with the database):
+
+>>> class Person(minidb.Model):
+...     name = str
+...     email = str
+...     age = int
+
+Every subclass of minidb.Model will also have a "id" attribute that is None if
+an instance is not stored in the database, or an automatically assigne value if
+it is in the database. This uniquely identifies an object in the database.
+
+Now it's time to register our minidb.Model subclass with the store:
+
+>>> db.register(Person)
+
+This will check if the table exists, and create the necessary structure (this
+output appears only when debug=True is passed to minidb.Store's constructor):
+
+: PRAGMA table_info(Person)
+: CREATE TABLE Person (id INTEGER PRIMARY KEY,
+                       name TEXT,
+                       email TEXT,
+                       age INTEGER)
+
+Now you can create instances of your minidb.Model subclass, optionally passing
+keyword arguments that will be used to initialize the fields:
+
+>>> p = Person(name='Hello World', email='minidb@example.com', age=99)
+>>> p
+<Person(id=None, name='Hello World', email='minidb@example.com', age=99)>
+
+To store this object in the database, use .save() on the instance with the
+store as sole argument:
+
+>>> p.save(db)
+
+In debug mode, we will see how it stores the object in the database:
+
+: INSERT INTO Person (name, email, age) VALUES (?, ?, ?)
+  ['Hello World', 'minidb@example.com', '99']
+
+Also, it will now have its "id" attribute assigned:
+
+>>> p
+<Person(id=1, name='Hello World', email='minidb@example.com', age=99)>
+
+The instance will remember the last minidb.Store object it was saved into or
+the minidb.Store object from which it was loaded, so you can leave it out the
+next time you want to save the object:
+
+>>> p.name = 'Hello Again'
+>>> p.save()
+
+Again, the store will figure out what needs to be done:
+
+: UPDATE Person SET name=?, email=?, age=? WHERE id=?
+  ['Hello Again', 'minidb@example.com', '99', 1]
+
+Now, let's insert some more data, just for fun:
+
+>>> for i in range(10):
+...     Person(name='Hello', email='x@example.org', age=10+i*3).save(db)
+
+Now that we have some objects in the database, let's query all elements, and
+also let's output if any of those loaded objects is the same object as p:
+
+>>> for person in Person.load(db):
+...     print(person, person is p)
+
+The SQL query that is executed by Person.load() is:
+
+: SELECT id, name, email, age FROM Person
+  []
+
+The output of the load looks like this:
+
+<Person(id=1, name='Hello Again', email='minidb@example.com', age=99)> True
+<Person(id=2, name='Hello', email='x@example.org', age=10)> False
+<Person(id=3, name='Hello', email='x@example.org', age=13)> False
+<Person(id=4, name='Hello', email='x@example.org', age=16)> False
+<Person(id=5, name='Hello', email='x@example.org', age=19)> False
+<Person(id=6, name='Hello', email='x@example.org', age=22)> False
+<Person(id=7, name='Hello', email='x@example.org', age=25)> False
+<Person(id=8, name='Hello', email='x@example.org', age=28)> False
+<Person(id=9, name='Hello', email='x@example.org', age=31)> False
+<Person(id=10, name='Hello', email='x@example.org', age=34)> False
+<Person(id=11, name='Hello', email='x@example.org', age=37)> False
+
+Note that the first object retrieved is actually the object p (there's no new
+object created, it's the same). minidb caches objects as long as you have a
+reference to them around, and will be able to retrieve those objects instead.
+This makes sure that all objects stay in sync, let's try modifying an object
+returned by Person.get(), a function that retrieves exactly one object:
+
+>>> print(p.name)
+Hello Again
+>>> Person.get(db, id=1).name = 'Hello'
+>>> print(p.name)
+Hello
+
+Now, let's try some more fancy queries. The minidb.Model subclass has a class
+attribute called "c" that can be used to reference to the columns/attributes:
+
+>>> Person.c
+<Columns for Person (name, email, age)>
+
+For example, we can query all objects for which age is between 16 and 50
+
+>>> Person.load(db, (Person.c.age >= 16) & (Person.c.age <= 50))
+
+This will run the following SQL query:
+
+: SELECT id, name, email, age FROM Person WHERE ( age >= ? ) AND ( age <= ? )
+  [16, 50]
+
+Instead of querying for full objects, you can also query for columns, for
+example, we can find out the minimum and maximum age value in the table:
+
+>>> next(Person.query(db, Person.c.age.min // Person.c.age.max))
+(10, 99)
+
+The corresponding query looks like this:
+
+: SELECT min(age), max(age) FROM Person
+  []
+
+Note that column1 // column2 is syntactic sugar for the more verbose syntax of
+minidb.columns(column1, column2). The .query() method returns a generator of
+rows, you can get a single row via the Python built-in next(). Each row can be
+accessed in different ways:
+
+ 1. As tuple (this is also the default representation when printing a row)
+ 2. As dictionary
+ 3. As object with attributes
+
+For example, as a dictionary:
+
+>>> dict(next(Person.query(db, Person.c.age.min)))
+{'min(age)': 10}
+
+If you want to have nicer names, you can give your result columns names:
+
+>>> dict(next(Person.query(db, Person.c.age.min('minimum_age'))))
+{'minimum_age': 10}
+
+The generated SQL query for renaming looks like this:
+
+: SELECT min(age) AS minimum_age FROM Person
+  []
+
+And of course, you can access the column using attribute access:
+
+>>> next(Person.query(db, Person.c.age.min('minimum_age'))).minimum_age
+10
+
+There is also support for SQL's ORDER BY, GROUP_BY and LIMIT, as optional
+keyword arguments to .query():
+
+>>> list(Person.query(db, Person.c.name // Person.c.age,
+...                   order_by=Person.c.age.desc, limit=5))
+
+To save typing, you can do:
+
+>>> Person.c.name.query(db)
+
+>>> (Person.c.name // Person.c.email).query(db)
+
+>>> (Person.c.name // Person.c.age).query(db, order_by=lamdba c: c.age.desc)
+
+>>> Person.query(db, lambda c: c.name // c.email)
+
+
+See example.py for more examples.
 
