@@ -22,7 +22,7 @@
 
 __author__ = 'Thomas Perl <m@thp.io>'
 __version__ = '1.1'
-__website__ = 'http://thp.io/2010/minidb/'
+__url__ = 'http://thp.io/2010/minidb/'
 __license__ = 'ISC'
 
 
