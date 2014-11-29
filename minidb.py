@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
+#           _      _    _ _
+#     _ __ (_)_ _ (_)__| | |__
+#    | '  \| | ' \| / _` | '_ \
+#    |_|_|_|_|_||_|_\__,_|_.__/
+#    simple python object store
 #
-# minidb - A simple SQLite3 store for Python objects
-# (based on "ORM wie eine Kirchenmaus" by thp, 2009-11-29)
-#
-# Copyright 2009-2010 Thomas Perl <thp.io>. All rights reserved.
+# Copyright 2009-2010, 2014 Thomas Perl <thp.io>. All rights reserved.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -18,15 +20,27 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-"""A simple SQLite3 store for Python objects"""
+"""A simple SQLite3-based store for Python objects"""
 
 __author__ = 'Thomas Perl <m@thp.io>'
-__version__ = '1.1'
+__version__ = '2.0.0'
 __url__ = 'http://thp.io/2010/minidb/'
 __license__ = 'ISC'
 
 
-__all__ = ['Store', 'Model', 'UnknownClass', 'columns', 'func', 'literal', 'pprint', 'pformat']
+__all__ = [
+    # Main classes
+    'Store', 'Model',
+
+    # Exceptions
+    'UnknownClass',
+
+    # Utility functions
+    'columns', 'func', 'literal',
+
+    # Debugging utilities
+    'pprint', 'pformat',
+]
 
 
 DEBUG_OBJECT_CACHE = False
@@ -55,8 +69,6 @@ def _get_all_slots(class_, include_private=False):
 
 
 def _set_attribute(o, slot, cls, value):
-    # Set a slot on the given object to value, doing a cast if
-    # necessary. The value None is special-cased and never cast.
     if value is not None:
         value = cls(value)
     setattr(o, slot, value)
@@ -88,17 +100,8 @@ class Store(object):
     PRIMARY_KEY = ('id', int)
     MINIDB_ATTR = '_minidb'
 
-    def __init__(self, filename=':memory:', autoregister=False, debug=False):
-        """Create (or load) a new minidb storage
-
-        Without arguments, this will create an in-memory
-        database that will be deleted when closed. If you
-        pass an argument, it should be the filename of the
-        database file (which will be created if it does
-        not yet exist).
-        """
+    def __init__(self, filename=':memory:', debug=False):
         self.db = sqlite3.connect(filename, check_same_thread=False)
-        self.autoregister = autoregister
         self.debug = debug
         self.registered = []
         self.lock = threading.RLock()
@@ -128,12 +131,10 @@ class Store(object):
         return (class_.__name__, list(_get_all_slots(class_)))
 
     def commit(self):
-        """Commit changes into the database"""
         with self.lock:
             self.db.commit()
 
     def close(self):
-        """Close the underlying database file"""
         with self.lock:
             self._execute('VACUUM')
             self.db.close()
@@ -177,7 +178,6 @@ class Store(object):
         return class_
 
     def convert(self, v):
-        """Convert a value to its string representation"""
         if v is None:
             return None
         elif isinstance(v, str):
@@ -187,18 +187,6 @@ class Store(object):
         else:
             return str(v)
 
-    def update(self, o, **kwargs):
-        """Update fields of an object and store the changes
-
-        This will update named fields (specified by keyword
-        arguments) inside the object and also store these
-        changes in the database.
-        """
-        self.remove(o)
-        for k, v in kwargs.items():
-            setattr(o, k, v)
-        self.save(o)
-
     def save_or_update(self, o):
         if o.id is None:
             o.id = self.save(o)
@@ -207,8 +195,6 @@ class Store(object):
 
     def delete_by_pk(self, o):
         with self.lock:
-            if self.autoregister:
-                self.register(o.__class__)
             table, slots = self._schema(o.__class__)
 
             assert self.PRIMARY_KEY in slots
@@ -221,8 +207,6 @@ class Store(object):
 
     def _update(self, o):
         with self.lock:
-            if self.autoregister:
-                self.register(o.__class__)
             table, slots = self._schema(o.__class__)
 
             # Update requires a primary key
@@ -252,17 +236,7 @@ class Store(object):
                                   list(gen_values()))
 
     def save(self, o):
-        """Save an object into the database
-
-        Save a newly-created object into the database. The
-        object will always be newly created, never updated.
-
-        If you want to update an object inside the database,
-        please use the "update" method instead.
-        """
         with self.lock:
-            if self.autoregister:
-                self.register(o.__class__)
             table, slots = self._schema(o.__class__)
 
             # If it's a Model subclass, we skip the primary key column
@@ -279,54 +253,15 @@ class Store(object):
                                   values).lastrowid
 
     def delete(self, class_, **kwargs):
-        """Delete objects from the database
-
-        Delete objects of type "class_" with the criteria
-        specified in "kwargs". Please note that all objects
-        that match the criteria will be deleted.
-
-        If you want to remove a specific object from the
-        database, use "remove" instead.
-        """
         with self.lock:
-            if self.autoregister:
-                self.register(class_)
             table, slots = self._schema(class_)
             sql = 'DELETE FROM %s' % (table,)
             if kwargs:
                 sql += ' WHERE %s' % (' AND '.join('%s=?' % k for k in kwargs))
             return self._execute(sql, kwargs.values()).rowcount > 0
 
-    def remove(self, o):
-        """Delete objects by template object
-
-        This will remove all objects from the database that
-        compare to the given object (i.e. all attributes of
-        "o" that are not None will match to the objects in
-        the database).
-
-        This method should be used to remove specific object
-        only. For bulk deletion based on some criteria, the
-        "delete" method might be better suited.
-        """
-        with self.lock:
-            if self.autoregister:
-                self.register(o.__class__)
-            table, slots = self._schema(o.__class__)
-
-            # Use "None" as wildcard selector in remove actions
-            slots = [(name, type_) for name, type_ in slots
-                     if getattr(o, name, None) is not None]
-
-            values = [self.convert(getattr(o, name)) for name, type_ in slots]
-            self._execute('DELETE FROM %s WHERE %s' % (table,
-                ' AND '.join('%s=?'% name for (name, type_) in slots)), values)
-
     def delete_where(self, class_, where):
         with self.lock:
-            if self.autoregister:
-                self.register(class_)
-
             table, slots = self._schema(class_)
 
             ssql, args = where.tosql()
@@ -336,9 +271,6 @@ class Store(object):
     def query(self, class_, select=None, where=None, order_by=None,
             group_by=None, limit=None):
         with self.lock:
-            if self.autoregister:
-                self.register(class_)
-
             table, slots = self._schema(class_)
 
             sql = []
@@ -391,23 +323,14 @@ class Store(object):
             return (RowProxy(row, columns) for row in result)
 
     def load(self, class_, *args, **kwargs):
-        """Load objects of a given class
-
-        Return a list of objects from the database that are of
-        type "class_". By default, all objects are returned,
-        but a simple pre-selection can be made using keyword
-        arguments.
-        """
         with self.lock:
-            if self.autoregister:
-                self.register(class_)
-
             query = kwargs.get('__query__', None)
             if '__query__' in kwargs:
                 del kwargs['__query__']
 
             table, slots = self._schema(class_)
-            sql = 'SELECT %s FROM %s' % (', '.join(name for name, type_ in slots), table)
+            sql = 'SELECT %s FROM %s' % (', '.join(name for name, type_
+                                                   in slots), table)
             if query:
                 ssql, aargs = query.tosql()
                 sql += ' WHERE %s' % ssql
@@ -428,16 +351,6 @@ class Store(object):
             return (x for x in (apply(row) for row in cur) if x is not None)
 
     def get(self, class_, *args, **kwargs):
-        """Load one object of a given class
-
-        This is a convenience function that will load only a
-        single object from the database, returning only that
-        object or None when the object is not found.
-
-        This method only makes sense when using keyword
-        arguments to select the object (i.e. using a
-        unique set of attributes to retrieve it).
-        """
         return next(self.load(class_, *args, **kwargs), None)
 
 
@@ -459,7 +372,7 @@ class Operation(object):
             raise ValueError('Cannot determine class for query')
 
         return class_.query(db, self, order_by=order_by, group_by=group_by,
-                limit=limit)
+                            limit=limit)
 
     def __floordiv__(self, other):
         if self.b is not None:
@@ -522,8 +435,8 @@ class Operation(object):
 
     def __repr__(self):
         if self.b is None:
-            return '{a!r} {op}'.format(**self.__dict__)
-        return '{a!r} {op} {b!r}'.format(**self.__dict__)
+            return '{self.a!r} {self.op}'.format(self=self)
+        return '{self.a!r} {self.op} {self.b!r}'.format(self=self)
 
 
 class Sequence(object):
@@ -537,12 +450,13 @@ class Sequence(object):
         return Operation(self).tosql()
 
     def query(self, db, order_by=None, group_by=None, limit=None):
-        return Operation(self).query(db, order_by=order_by, group_by=None,
-                limit=limit)
+        return Operation(self).query(db, order_by=order_by, group_by=group_by,
+                                     limit=limit)
 
     def __floordiv__(self, other):
         self.args.append(other)
         return self
+
 
 def columns(*args):
     """columns(a, b, c) -> a // b // c
@@ -550,6 +464,7 @@ def columns(*args):
     Query multiple columns, like the // column sequence operator.
     """
     return Sequence(args)
+
 
 class func(object):
     max = staticmethod(lambda *args: Function('max', *args))
@@ -566,11 +481,14 @@ class func(object):
 
     count = staticmethod(lambda a: Function('count', a))
 
+
 class OperatorMixin(object):
     __lt__ = lambda a, b: Operation(a, '<', b)
     __le__ = lambda a, b: Operation(a, '<=', b)
-    __eq__ = lambda a, b: Operation(a, '=', b) if b is not None else Operation(a, 'IS NULL')
-    __ne__ = lambda a, b: Operation(a, '!=', b) if b is not None else Operation(a, 'IS NOT NULL')
+    __eq__ = lambda a, b: Operation(a, '=', b) if b is not None \
+                          else Operation(a, 'IS NULL')
+    __ne__ = lambda a, b: Operation(a, '!=', b) if b is not None \
+                          else Operation(a, 'IS NOT NULL')
     __gt__ = lambda a, b: Operation(a, '>', b)
     __ge__ = lambda a, b: Operation(a, '>=', b)
 
@@ -666,9 +584,7 @@ def model_init(self, *args, **kwargs):
         getattr(self, '__minidb_init__')(*args)
 
 
-class ClassAttributesAsSlotsMeta(type):
-    """Metaclass that turns class attributes into __slots__, and renames __init__ to __minidb_init__"""
-
+class MetaModel(type):
     @classmethod
     def __prepare__(metacls, name, bases):
         return collections.OrderedDict()
@@ -708,9 +624,11 @@ class ClassAttributesAsSlotsMeta(type):
 
 def pformat(result, color=False):
     def incolor(color_id, s):
-        return '\033[9%dm%s\033[0m' % (color_id, s) if sys.stdout.isatty() and color else s
+        return '\033[9%dm%s\033[0m' % (color_id, s) if sys.stdout.isatty() \
+                and color else s
 
-    inred, ingreen, inyellow, inblue = (functools.partial(incolor, x) for x in range(1, 5))
+    inred, ingreen, inyellow, inblue = (functools.partial(incolor, x)
+                                        for x in range(1, 5))
 
     rows = list(result)
     if not rows:
@@ -726,11 +644,16 @@ def pformat(result, color=False):
 
     s = []
     keys = rows[0].keys()
-    lengths = tuple(max(x) for x in zip(*[[len(str(column)) for column in row] for row in [keys]+rows]))
-    s.append(' | '.join(inyellow('%-{}s'.format(length) % key) for key, length in zip(keys, lengths)))
+    lengths = tuple(max(x) for x in zip(*[[len(str(column))
+                                           for column in row]
+                                          for row in [keys]+rows]))
+    s.append(' | '.join(inyellow('%-{}s'.format(length) % key)
+                        for key, length in zip(keys, lengths)))
     s.append('-+-'.join('-'*length for length in lengths))
     for row in rows:
-        s.append(' | '.join(colorvalue('%-{}s'.format(length) % column, column) for column, length in zip(row, lengths)))
+        s.append(' | '.join(colorvalue('%-{}s'.format(length) % column,
+                                        column) for column, length in
+                                        zip(row, lengths)))
     s.append('({} row(s))'.format(len(rows)))
     return ('\n'.join(s))
 
@@ -739,7 +662,7 @@ def pprint(result, color=False):
     print(pformat(result, color))
 
 
-class Model(metaclass=ClassAttributesAsSlotsMeta):
+class Model(metaclass=MetaModel):
     id = int
     _minidb = Store
 

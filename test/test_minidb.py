@@ -65,7 +65,8 @@ def test_instantiate_fieldtest_from_code():
 
 
 def test_saving_object_stores_id():
-    with minidb.Store(autoregister=True, debug=True) as db:
+    with minidb.Store(debug=True) as db:
+        db.register(FieldTest)
         field_test = FieldTest(998)
         assert field_test.id is None
         field_test.save(db)
@@ -73,7 +74,8 @@ def test_saving_object_stores_id():
 
 
 def test_loading_object_returns_cached_object():
-    with minidb.Store(autoregister=True, debug=True) as db:
+    with minidb.Store(debug=True) as db:
+        db.register(FieldTest)
         field_test = FieldTest(9999)
         field_test._private1 = 4711
         assert field_test.id is None
@@ -85,7 +87,8 @@ def test_loading_object_returns_cached_object():
 
 
 def test_loading_object_returns_new_object_after_reference_drop():
-    with minidb.Store(autoregister=True, debug=True) as db:
+    with minidb.Store(debug=True) as db:
+        db.register(FieldTest)
         field_test = FieldTest(9999)
         field_test._private1 = 4711
         assert field_test.id is None
@@ -99,7 +102,8 @@ def test_loading_object_returns_new_object_after_reference_drop():
 
 
 def test_loading_objects():
-    with minidb.Store(autoregister=True, debug=True) as db:
+    with minidb.Store(debug=True) as db:
+        db.register(FieldTest)
         for i in range(100):
             FieldTest(i).save(db)
 
@@ -112,7 +116,7 @@ def test_loading_objects():
 
 @raises(minidb.UnknownClass)
 def test_saving_without_registration_fails():
-    with minidb.Store(autoregister=False, debug=True) as db:
+    with minidb.Store(debug=True) as db:
         FieldTest(9).save(db)
 
 
@@ -122,11 +126,13 @@ def test_registering_non_subclass_of_model_fails():
     class Something(object):
         column = str
 
-    with minidb.Store(autoregister=False, debug=True) as db:
+    with minidb.Store(debug=True) as db:
+        db.register(Something)
         db.register(Something)
 
 
 @raises(KeyError)
 def test_invalid_keyword_arguments_fails():
-    with minidb.Store(autoregister=False, debug=True) as db:
+    with minidb.Store(debug=True) as db:
+        db.register(FieldTest)
         FieldTest(9, this_is_not_an_attribute=123).save(db)

@@ -69,7 +69,7 @@ Person.sm_bar()
 class FooObject(object):
     pass
 
-with minidb.Store(autoregister=False, debug=True) as db:
+with minidb.Store(debug=True) as db:
     db.register(Person)
     db.register(WithoutConstructor)
     db.register(AdvancedPerson)
