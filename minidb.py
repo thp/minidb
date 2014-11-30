@@ -30,7 +30,7 @@ __license__ = 'ISC'
 
 __all__ = [
     # Main classes
-    'Store', 'Model',
+    'Store', 'Model', 'JSON',
 
     # Exceptions
     'UnknownClass',
@@ -54,6 +54,7 @@ import types
 import collections
 import weakref
 import sys
+import json
 
 
 class UnknownClass(TypeError):
@@ -69,7 +70,7 @@ def _get_all_slots(class_, include_private=False):
 
 
 def _set_attribute(o, slot, cls, value):
-    if value is not None:
+    if value is not None and not hasattr(cls, '__minidb_deserialize__'):
         value = cls(value)
     setattr(o, slot, value)
 
@@ -86,6 +87,9 @@ class RowProxy(object):
         return self._row[key]
 
     def __getattr__(self, attr):
+        if attr not in self._keys:
+            raise AttributeError(attr)
+
         return self[attr]
 
     def __repr__(self):
@@ -177,15 +181,25 @@ class Store(object):
 
         return class_
 
-    def convert(self, v):
+    def serialize(self, v, t):
         if v is None:
             return None
+        elif hasattr(t, '__minidb_serialize__'):
+            return t.__minidb_serialize__(v)
         elif isinstance(v, str):
             return v
-        elif isinstance(v, bytes):
-            return v.decode('utf-8')
-        else:
-            return str(v)
+
+        return str(v)
+
+    def deserialize(self, v, t):
+        if v is None:
+            return None
+        elif hasattr(t, '__minidb_deserialize__'):
+            return t.__minidb_deserialize__(v)
+        elif isinstance(v, t):
+            return v
+
+        return t(v)
 
     def save_or_update(self, o):
         if o.id is None:
@@ -227,7 +241,7 @@ class Store(object):
             def gen_values():
                 for name, type_, value in values:
                     if value is not None:
-                        yield self.convert(value)
+                        yield self.serialize(value, type_)
 
                 yield getattr(o, pk_name)
 
@@ -246,7 +260,7 @@ class Store(object):
             slots = [(name, type_) for name, type_ in slots
                      if not skip_primary_key or (name, type_) != self.PRIMARY_KEY]
 
-            values = [self.convert(getattr(o, name)) for name, type_ in slots]
+            values = [self.serialize(getattr(o, name), type_) for name, type_ in slots]
             return self._execute('INSERT INTO %s (%s) VALUES (%s)' % (table,
                                   ', '.join(name for name, type_ in slots),
                                   ', '.join('?'*len(slots))),
@@ -272,6 +286,7 @@ class Store(object):
             group_by=None, limit=None):
         with self.lock:
             table, slots = self._schema(class_)
+            attr_to_type = dict(slots)
 
             sql = []
             args = []
@@ -282,6 +297,19 @@ class Store(object):
             if isinstance(select, types.FunctionType):
                 # Late-binding of columns
                 select = select(class_.c)
+
+            # Select can always be a sequence
+            if not isinstance(select, Sequence):
+                select = Sequence([select])
+
+            # Look for RenameOperation operations in the SELECT sequence and
+            # remember the column types, so we can decode values properly later
+            for arg in select.args:
+                if isinstance(arg, Operation):
+                    if isinstance(arg.a, RenameOperation):
+                        if isinstance(arg.a.column, Column):
+                            attr_to_type[arg.a.name] = arg.a.column.type_
+
             ssql, sargs = select.tosql()
             sql.append('SELECT %s FROM %s' % (ssql, table))
             args.extend(sargs)
@@ -320,7 +348,15 @@ class Store(object):
 
             result = self._execute(sql, args)
             columns = [d[0] for d in result.description]
-            return (RowProxy(row, columns) for row in result)
+
+            def _decode(row, columns):
+                for name, value in zip(columns, row):
+                    type_ = attr_to_type.get(name, None)
+                    yield (self.deserialize(value, type_)
+                           if type_ is not None else value)
+
+            return (RowProxy(tuple(_decode(row, columns)), columns)
+                    for row in result)
 
     def load(self, class_, *args, **kwargs):
         with self.lock:
@@ -342,8 +378,9 @@ class Store(object):
                 sql_args = []
             cur = self._execute(sql, sql_args)
             def apply(row):
-                row = zip((name for name, type_ in slots), row)
-                kwargs = {k: v for k, v in row if v is not None}
+                row = zip(slots, row)
+                kwargs = {name: self.deserialize(v, type_) for (name, type_), v
+                          in row if v is not None}
                 o = class_(*args, **kwargs)
                 setattr(o, self.MINIDB_ATTR, self)
 
@@ -361,18 +398,21 @@ class Operation(object):
         self.b = b
         self.brackets = brackets
 
-    def query(self, db, order_by=None, group_by=None, limit=None):
-        if isinstance(self.a, Column):
-            class_ = self.a.class_
-        elif isinstance(self.a, Function):
-            class_ = self.a.args[0].class_
-        elif isinstance(self.a, Sequence):
-            class_ = self.a.args[0].class_
-        else:
-            raise ValueError('Cannot determine class for query')
+    def _get_class(self, a):
+        if isinstance(a, Column):
+            return a.class_
+        elif isinstance(a, RenameOperation):
+            return self._get_class(a.column)
+        elif isinstance(a, Function):
+            return a.args[0].class_
+        elif isinstance(a, Sequence):
+            return a.args[0].class_
 
-        return class_.query(db, self, order_by=order_by, group_by=group_by,
-                            limit=limit)
+        raise ValueError('Cannot determine class for query')
+
+    def query(self, db, order_by=None, group_by=None, limit=None):
+        return self._get_class(self.a).query(db, self, order_by=order_by,
+                                             group_by=group_by, limit=limit)
 
     def __floordiv__(self, other):
         if self.b is not None:
@@ -384,6 +424,9 @@ class Operation(object):
             return arg.tosql(self.brackets)
         elif isinstance(arg, Column):
             return (arg.name, [])
+        elif isinstance(arg, RenameOperation):
+            columnname, args = arg.column.tosql()
+            return ('%s AS %s' % (columnname, arg.name), args)
         elif isinstance(arg, Function):
             sqls = []
             argss = []
@@ -435,6 +478,8 @@ class Operation(object):
 
     def __repr__(self):
         if self.b is None:
+            if self.op is None:
+                return '{self.a!r}'.format(self=self)
             return '{self.a!r} {self.op}'.format(self=self)
         return '{self.a!r} {self.op} {self.b!r}'.format(self=self)
 
@@ -492,7 +537,7 @@ class OperatorMixin(object):
     __gt__ = lambda a, b: Operation(a, '>', b)
     __ge__ = lambda a, b: Operation(a, '>=', b)
 
-    __call__ = lambda a, name: Operation(a, 'AS %s' % name)
+    __call__ = lambda a, name: RenameOperation(a, name)
     tosql = lambda a: Operation(a).tosql()
     query = lambda a, db, order_by=None, group_by=None, limit=None: \
             Operation(a).query(db, order_by=order_by, group_by=group_by,
@@ -516,6 +561,15 @@ class OperatorMixin(object):
     rtrim = property(lambda a: Function('rtrim', a))
     trim = property(lambda a: Function('trim', a))
     count = property(lambda a: Function('count', a))
+
+
+class RenameOperation(OperatorMixin):
+    def __init__(self, column, name):
+        self.column = column
+        self.name = name
+
+    def __repr__(self):
+        return '%r AS %s' % (self.column, self.name)
 
 
 class Literal(OperatorMixin):
@@ -566,8 +620,10 @@ class Columns(object):
 
     def __getattr__(self, name):
         d = {k: v for k, v in _get_all_slots(self._class, include_private=True)}
-        if name in d:
-            return Column(self._class, name, d[name])
+        if name not in d:
+            raise AttributeError(name)
+
+        return Column(self._class, name, d[name])
 
 
 def model_init(self, *args, **kwargs):
@@ -660,6 +716,17 @@ def pformat(result, color=False):
 
 def pprint(result, color=False):
     print(pformat(result, color))
+
+
+class JSON(object):
+    @classmethod
+    def __minidb_serialize__(cls, d):
+        return json.dumps(d)
+
+    @classmethod
+    def __minidb_deserialize__(cls, s):
+        assert isinstance(s, str)
+        return json.loads(s)
 
 
 class Model(metaclass=MetaModel):

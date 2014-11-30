@@ -51,6 +51,28 @@ class FieldTest(minidb.Model):
         self._private3 = new_value
 
 
+
+class FieldConversion(minidb.Model):
+    integer = int
+    floating = float
+    boolean = bool
+    string = str
+    jsoninteger = minidb.JSON
+    jsonfloating = minidb.JSON
+    jsonboolean = minidb.JSON
+    jsonstring = minidb.JSON
+    jsonlist = minidb.JSON
+    jsondict = minidb.JSON
+    jsonnone = minidb.JSON
+
+    @classmethod
+    def create(cls):
+        return cls(integer=1, floating=1.1, boolean=True, string='test',
+                   jsonlist=[1, 2], jsondict={'a': 1}, jsonnone=None,
+                   jsoninteger=1, jsonfloating=1.1, jsonboolean=True,
+                   jsonstring='test')
+
+
 def test_instantiate_fieldtest_from_code():
     field_test = FieldTest(999)
     assert field_test.id is None
@@ -136,3 +158,84 @@ def test_invalid_keyword_arguments_fails():
     with minidb.Store(debug=True) as db:
         db.register(FieldTest)
         FieldTest(9, this_is_not_an_attribute=123).save(db)
+
+
+@raises(AttributeError)
+def test_invalid_column_raises_attribute_error():
+    class HasOnlyColumnX(minidb.Model):
+        x = int
+
+    with minidb.Store(debug=True) as db:
+        db.register(HasOnlyColumnX)
+        HasOnlyColumnX.c.y
+
+
+def test_json_serialization():
+    class WithJsonField(minidb.Model):
+        foo = str
+        bar = minidb.JSON
+
+    with minidb.Store(debug=True) as db:
+        db.register(WithJsonField)
+        d = {'a': 1, 'b': [1, 2, 3], 'c': [True, 4.0, {'d': 'e'}]}
+        WithJsonField(bar=d).save(db)
+        assert WithJsonField.get(db, id=1).bar == d
+
+
+def test_json_field_query():
+    class WithJsonField(minidb.Model):
+        bar = minidb.JSON
+
+    with minidb.Store(debug=True) as db:
+        db.register(WithJsonField)
+        d = {'a': [1, True, 3.9]}
+        WithJsonField(bar=d).save(db)
+        eq_(next(WithJsonField.c.bar.query(db)).bar, d)
+
+
+def test_json_field_renamed_query():
+    class WithJsonField(minidb.Model):
+        bar = minidb.JSON
+
+    with minidb.Store(debug=True) as db:
+        db.register(WithJsonField)
+        d = {'a': [1, True, 3.9]}
+        WithJsonField(bar=d).save(db)
+        eq_(next(WithJsonField.c.bar('renamed').query(db)).renamed, d)
+
+
+def test_field_conversion_get_object():
+    with minidb.Store(debug=True) as db:
+        db.register(FieldConversion)
+        FieldConversion.create().save(db)
+        result = FieldConversion.get(db, id=1)
+        assert isinstance(result.integer, int)
+        assert isinstance(result.floating, float)
+        assert isinstance(result.boolean, bool)
+        assert isinstance(result.string, str)
+        assert isinstance(result.jsoninteger, int)
+        assert isinstance(result.jsonfloating, float)
+        assert isinstance(result.jsonboolean, bool)
+        assert isinstance(result.jsonstring, str)
+        assert isinstance(result.jsonlist, list)
+        assert isinstance(result.jsondict, dict)
+        assert result.jsonnone is None
+
+
+
+def test_field_conversion_query_select_star():
+    with minidb.Store(debug=True) as db:
+        db.register(FieldConversion)
+        FieldConversion.create().save(db)
+        result = next(FieldConversion.query(db, minidb.literal('*')))
+        assert isinstance(result.integer, int)
+        assert isinstance(result.floating, float)
+        assert isinstance(result.boolean, bool)
+        assert isinstance(result.string, str)
+        assert isinstance(result.jsoninteger, int)
+        assert isinstance(result.jsonfloating, float)
+        assert isinstance(result.jsonboolean, bool)
+        assert isinstance(result.jsonstring, str)
+        assert isinstance(result.jsonlist, list)
+        assert isinstance(result.jsondict, dict)
+        assert result.jsonnone is None

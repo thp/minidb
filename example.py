@@ -61,6 +61,10 @@ class WithoutConstructor(minidb.Model):
     height = float
 
 
+class WithPayload(minidb.Model):
+    payload = minidb.JSON
+
+
 Person.__custom_class_attribute__.append(333)
 print(Person.__custom_class_attribute__)
 Person.cm_foo()
@@ -73,6 +77,7 @@ with minidb.Store(debug=True) as db:
     db.register(Person)
     db.register(WithoutConstructor)
     db.register(AdvancedPerson)
+    db.register(WithPayload)
 
     AdvancedPerson(username='advanced', mail='a@example.net').save(db)
 
@@ -240,6 +245,13 @@ with minidb.Store(debug=True) as db:
 
     print('Pretty-Querying with default star-select')
     Person.pquery(db)
+
+    print('With payload (JSON)')
+    WithPayload(payload={'a': [1]*3}).save(db)
+    for payload in WithPayload.load(db):
+        print('foo', payload)
+
+    print(next(WithPayload.c.payload.query(db)))
 
 
 
