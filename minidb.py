@@ -82,7 +82,12 @@ class RowProxy(object):
 
     def __getitem__(self, key):
         if isinstance(key, str):
-            return self._row[self._keys.index(key)]
+            try:
+                index = self._keys.index(key)
+            except ValueError as ve:
+                raise KeyError(key)
+
+            return self._row[index]
 
         return self._row[key]
 
@@ -107,7 +112,7 @@ class Store(object):
     def __init__(self, filename=':memory:', debug=False):
         self.db = sqlite3.connect(filename, check_same_thread=False)
         self.debug = debug
-        self.registered = []
+        self.registered = {}
         self.lock = threading.RLock()
 
     def __enter__(self):
@@ -130,7 +135,7 @@ class Store(object):
             return self.db.execute(sql, args)
 
     def _schema(self, class_):
-        if class_ not in self.registered:
+        if class_ not in self.registered.values():
             raise UnknownClass('{} was never registered'.format(class_))
         return (class_.__name__, list(_get_all_slots(class_)))
 
@@ -169,15 +174,18 @@ class Store(object):
                 self._execute('CREATE TABLE %s (%s)' % (table, ', '.join(column(name, type_)
                     for name, type_ in slots)))
 
-    def register(self, class_):
+    def register(self, class_, upgrade=False):
         if not issubclass(class_, Model):
-            raise TypeError('%s is not a subclass of minidb.Model', class_.__name__)
+            raise TypeError('{} is not a subclass of minidb.Model'.format(class_.__name__))
 
-        if class_ in self.registered:
-            return class_
+        if class_ in self.registered.values():
+            raise TypeError('{} is already registered'.format(class_.__name__))
+        elif class_.__name__ in self.registered and not upgrade:
+            raise TypeError('{} is already registered {}'.format(class_.__name__,
+                                                                 self.registered[class_.__name__]))
 
         with self.lock:
-            self.registered.append(class_)
+            self.registered[class_.__name__] = class_
             table, slots = self._schema(class_)
             self._ensure_schema(table, slots)
 
@@ -269,14 +277,6 @@ class Store(object):
                                   ', '.join(name for name, type_ in slots),
                                   ', '.join('?'*len(slots))),
                                   values).lastrowid
-
-    def delete(self, class_, **kwargs):
-        with self.lock:
-            table, slots = self._schema(class_)
-            sql = 'DELETE FROM %s' % (table,)
-            if kwargs:
-                sql += ' WHERE %s' % (' AND '.join('%s = ?' % k for k in kwargs))
-            return self._execute(sql, kwargs.values()).rowcount > 0
 
     def delete_where(self, class_, where):
         with self.lock:
@@ -376,6 +376,10 @@ class Store(object):
             sql = 'SELECT %s FROM %s' % (', '.join(name for name, type_
                                                    in slots), table)
             if query:
+                if isinstance(query, types.FunctionType):
+                    # Late-binding of query
+                    query = query(class_.c)
+
                 ssql, aargs = query.tosql()
                 sql += ' WHERE %s' % ssql
                 sql_args = aargs
@@ -533,6 +537,7 @@ def columns(*args):
 class func(object):
     max = staticmethod(lambda *args: Function('max', *args))
     min = staticmethod(lambda *args: Function('min', *args))
+    sum = staticmethod(lambda *args: Function('sum', *args))
     random = staticmethod(lambda: Function('random'))
 
     abs = staticmethod(lambda a: Function('abs', a))
@@ -544,6 +549,7 @@ class func(object):
     trim = staticmethod(lambda a: Function('trim', a))
 
     count = staticmethod(lambda a: Function('count', a))
+    __call__ = lambda a, name: RenameOperation(a, name)
 
 
 class OperatorMixin(object):
@@ -568,6 +574,7 @@ class OperatorMixin(object):
     avg = property(lambda a: Function('avg', a))
     max = property(lambda a: Function('max', a))
     min = property(lambda a: Function('min', a))
+    sum = property(lambda a: Function('sum', a))
 
     asc = property(lambda a: Operation(a, 'ASC'))
     desc = property(lambda a: Operation(a, 'DESC'))
@@ -830,6 +837,8 @@ class Model(metaclass=MetaModel):
     def delete(self):
         if getattr(self, Store.MINIDB_ATTR) is None:
             raise ValueError('Needs a db object')
+        elif self.id is None:
+            raise KeyError('id is None (not stored in db?)')
 
         # drop from cache
         cache = self.__class__.__minidb_cache__

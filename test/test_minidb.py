@@ -250,6 +250,8 @@ def test_storing_and_retrieving_booleans():
         true_id = BooleanModel(value=True).save(db).id
         false_id = BooleanModel(value=False).save(db).id
         assert BooleanModel.get(db, id=true_id).value is True
+        assert BooleanModel.get(db, BooleanModel.c.id == true_id).value is True
+        assert BooleanModel.get(db, lambda c: c.id == true_id).value is True
         assert BooleanModel.get(db, id=false_id).value is False
         assert next(BooleanModel.c.value.query(db, where=lambda c: c.id == true_id)).value is True
         assert next(BooleanModel.c.value.query(db, where=lambda c: c.id == false_id)).value is False
@@ -325,3 +327,176 @@ def test_delete_where():
         assert DeleteWhere.delete_where(db, lambda c: c.v < 2) == len({0, 1})
         assert DeleteWhere.delete_where(db, DeleteWhere.c.v > 5) == len({6, 7, 8, 9})
         assert {2, 3, 4, 5} == {v for (v,) in DeleteWhere.c.v.query(db)}
+
+
+
+@raises(AttributeError)
+def test_invalid_rowproxy_access_by_attribute():
+    class Foo(minidb.Model):
+        bar = str
+
+    with minidb.Store(debug=True) as db:
+        db.register(Foo)
+        Foo(bar='baz').save(db)
+        next(Foo.query(db, Foo.c.bar)).baz
+
+
+@raises(KeyError)
+def test_invalid_rowproxy_access_by_key():
+    class Foo(minidb.Model):
+        bar = str
+
+    with minidb.Store(debug=True) as db:
+        db.register(Foo)
+        Foo(bar='baz').save(db)
+        next(Foo.query(db, Foo.c.bar))['baz']
+
+
+@raises(TypeError)
+def test_use_schema_without_registration_raises_typeerror():
+    with minidb.Store(debug=True) as db:
+        class Foo(minidb.Model):
+            bar = str
+        Foo.query(db)
+
+
+@raises(TypeError)
+def test_use_schema_with_nonidentity_class_raises_typeerror():
+    with minidb.Store(debug=True) as db:
+        class Foo(minidb.Model):
+            bar = str
+        db.register(Foo)
+
+        class Foo(minidb.Model):
+            bar = str
+
+        Foo.query(db)
+
+
+@raises(TypeError)
+def test_upgrade_schema_without_upgrade_raises_typeerror():
+    with minidb.Store(debug=True) as db:
+        class Foo(minidb.Model):
+            bar = str
+
+        db.register(Foo)
+
+        class Foo(minidb.Model):
+            bar = str
+            baz = int
+
+        db.register(Foo)
+
+
+@raises(TypeError)
+def test_reregistering_class_raises_typeerror():
+    class Foo(minidb.Model):
+        bar = int
+
+    with minidb.Store(debug=True) as db:
+        db.register(Foo)
+        db.register(Foo)
+
+
+def test_upgrade_schema_with_upgrade_succeeds():
+    with minidb.Store(debug=True) as db:
+        class Foo(minidb.Model):
+            bar = str
+
+        db.register(Foo)
+
+        class Foo(minidb.Model):
+            bar = str
+            baz = int
+
+        db.register(Foo, upgrade=True)
+
+
+def test_update_object():
+    class Foo(minidb.Model):
+        bar = str
+
+    with minidb.Store(debug=True) as db:
+        db.register(Foo)
+        a = Foo(bar='a').save(db)
+        b = Foo(bar='b').save(db)
+
+        a.bar = 'c'
+        a.save()
+
+        b.bar = 'd'
+        b.save()
+
+        assert {'c', 'd'} == {bar for (bar,) in Foo.c.bar.query(db)}
+
+
+def test_delete_object():
+    class Foo(minidb.Model):
+        bar = int
+
+    with minidb.Store(debug=True) as db:
+        db.register(Foo)
+        for i in range(3):
+            Foo(bar=i).save(db)
+
+        Foo.get(db, bar=2).delete()
+
+        assert {0, 1} == {bar for (bar,) in Foo.c.bar.query(db)}
+
+
+def test_group_by_with_sum():
+    class Foo(minidb.Model):
+        bar = str
+        baz = int
+
+    with minidb.Store(debug=True) as db:
+        db.register(Foo)
+
+        for i in range(5):
+            Foo(bar='hi', baz=i).save(db)
+
+        for i in range(6):
+            Foo(bar='ho', baz=i).save(db)
+
+        expected = {('hi', sum(range(5))), ('ho', sum(range(6)))}
+
+        # minidb.func.sum(COLUMN)(NAME)
+        result = {tuple(x) for x in Foo.query(db, lambda c: c.bar //
+                  minidb.func.sum(c.baz)('sum'), group_by=lambda c: c.bar)}
+        eq_(result, expected)
+
+        # COLUMN.sum(NAME)
+        result = {tuple(x) for x in Foo.query(db, lambda c: c.bar //
+                  c.baz.sum('sum'), group_by=lambda c: c.bar)}
+        eq_(result, expected)
+
+
+@raises(ValueError)
+def test_save_without_db_raises_valueerror():
+    class Foo(minidb.Model):
+        bar = int
+
+    Foo(bar=99).save()
+
+
+@raises(ValueError)
+def test_delete_without_db_raises_valueerror():
+    class Foo(minidb.Model):
+        bar = int
+
+    Foo(bar=99).delete()
+
+
+@raises(KeyError)
+def test_double_delete_without_id_raises_valueerror():
+    class Foo(minidb.Model):
+        bar = str
+
+    with minidb.Store(debug=True) as db:
+        db.register(Foo)
+        a = Foo(bar='hello')
+        a.save(db)
+        assert a.id is not None
+        a.delete()
+        assert a.id is None
+        a.delete()
