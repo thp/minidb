@@ -159,25 +159,37 @@ class Store(object):
             cur = self._execute('PRAGMA table_info(%s)' % table)
             available = cur.fetchall()
 
-            def column(name, type_):
-                if (name, type_) == self.PRIMARY_KEY:
-                    return 'id INTEGER PRIMARY KEY'
+            def column(name, type_, primary=True):
+                if (name, type_) == self.PRIMARY_KEY and primary:
+                    return 'INTEGER PRIMARY KEY'
                 elif type_ in (int, bool):
-                    return '{name} INTEGER'.format(name=name)
+                    return 'INTEGER'
                 elif type_ in (float,):
-                    return '{name} REAL'.format(name=name)
+                    return 'REAL'
                 elif type_ in (bytes,):
-                    return '{name} BLOB'.format(name=name)
+                    return 'BLOB'
                 else:
-                    return '{name} TEXT'.format(name=name)
+                    return 'TEXT'
 
             if available:
-                available = [row[1] for row in available]
-                missing_slots = ((name, type_) for name, type_ in slots if name not in available)
+                available = [(row[1], row[2]) for row in available]
+
+                modify_slots = [(name, type_) for name, type_ in slots
+                                if name in (name for name, _ in available) and
+                                (name, column(name, type_, False)) not in available]
+                for name, type_ in modify_slots:
+                    raise TypeError('Column {} is {}, but expected {}'.format(name,
+                        next(dbtype for n, dbtype in available if n == name),
+                        column(name, type_)))
+
+                # TODO: What to do with extraneous columns?
+
+                missing_slots = [(name, type_) for name, type_ in slots
+                                 if name not in (n for n, _ in available)]
                 for name, type_ in missing_slots:
-                    self._execute('ALTER TABLE %s ADD COLUMN %s' % (table, column(name, type_)))
+                    self._execute('ALTER TABLE %s ADD COLUMN %s %s' % (table, name, column(name, type_)))
             else:
-                self._execute('CREATE TABLE %s (%s)' % (table, ', '.join(column(name, type_)
+                self._execute('CREATE TABLE %s (%s)' % (table, ', '.join('{} {}'.format(name, column(name, type_))
                     for name, type_ in slots)))
 
     def register(self, class_, upgrade=False):

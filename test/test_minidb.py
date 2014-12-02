@@ -412,6 +412,20 @@ def test_upgrade_schema_with_upgrade_succeeds():
         db.register(Foo, upgrade=True)
 
 
+@raises(TypeError)
+def test_upgrade_schema_with_different_type_raises_typeerror():
+    with minidb.Store(debug=True) as db:
+        class Foo(minidb.Model):
+            bar = str
+
+        db.register(Foo)
+
+        class Foo(minidb.Model):
+            bar = int
+
+        db.register(Foo, upgrade=True)
+
+
 def test_update_object():
     class Foo(minidb.Model):
         bar = str
