@@ -515,3 +515,29 @@ def test_default_values_are_set_if_none():
 
         f = Foo(name='John')
         eq_(f.name, 'John')
+
+
+def test_default_values_with_callable():
+    class Foo(minidb.Model):
+        name = str
+        email = str
+
+        # Defaults are applied in order of slots of the Model
+        # subclass, so if e.g. email depends on name to be
+        # set, make sure email appears *after* name in the model
+        class __minidb_defaults__:
+            name = lambda o: 'Bob'
+            email = lambda o: o.name + '@example.com'
+
+    with minidb.Store(debug=True) as db:
+        f = Foo()
+        eq_(f.name, 'Bob')
+        eq_(f.email, 'Bob@example.com')
+
+        f = Foo(name='John')
+        eq_(f.name, 'John')
+        eq_(f.email, 'John@example.com')
+
+        f = Foo(name='Joe', email='joe@example.net')
+        eq_(f.name, 'Joe')
+        eq_(f.email, 'joe@example.net')
