@@ -109,9 +109,10 @@ class Store(object):
     PRIMARY_KEY = ('id', int)
     MINIDB_ATTR = '_minidb'
 
-    def __init__(self, filename=':memory:', debug=False):
+    def __init__(self, filename=':memory:', debug=False, smartupdate=False):
         self.db = sqlite3.connect(filename, check_same_thread=False)
         self.debug = debug
+        self.smartupdate = smartupdate
         self.registered = {}
         self.lock = threading.RLock()
 
@@ -239,9 +240,27 @@ class Store(object):
             assert self.PRIMARY_KEY in slots
             pk_name, pk_type = self.PRIMARY_KEY
 
+            if self.smartupdate:
+                existing = dict(next(self.query(o.__class__, where=lambda c:
+                                                getattr(c, pk_name) ==
+                                                getattr(o, pk_name))))
+            else:
+                existing = {}
+
             values = [(name, type_, getattr(o, name, None))
                       for name, type_ in slots
-                      if (name, type_) != self.PRIMARY_KEY]
+                      if (name, type_) != self.PRIMARY_KEY and
+                      (name not in existing or
+                       getattr(o, name, None) != existing[name])]
+
+            if self.smartupdate and self.debug:
+                for name, type_, to_value in values:
+                    print('    #', '{}(id={})'.format(table, o.id),
+                          '{}: {} -> {}'.format(name, existing[name], to_value))
+
+            if not values:
+                # No values have changed - nothing to update
+                return
 
             def gen_keys():
                 for name, type_, value in values:
@@ -257,20 +276,17 @@ class Store(object):
 
                 yield getattr(o, pk_name)
 
-            res = self._execute('UPDATE %s SET %s WHERE %s = ?' % (table,
-                                  ', '.join(gen_keys()), pk_name),
-                                  list(gen_values()))
+            self._execute('UPDATE %s SET %s WHERE %s = ?' % (table,
+                          ', '.join(gen_keys()), pk_name),
+                          list(gen_values()))
 
     def save(self, o):
         with self.lock:
             table, slots = self._schema(o.__class__)
 
-            # If it's a Model subclass, we skip the primary key column
-            skip_primary_key = isinstance(o, Model)
-
             # Save all values except for the primary key
             slots = [(name, type_) for name, type_ in slots
-                     if not skip_primary_key or (name, type_) != self.PRIMARY_KEY]
+                     if (name, type_) != self.PRIMARY_KEY]
 
             values = [self.serialize(getattr(o, name), type_) for name, type_ in slots]
             return self._execute('INSERT INTO %s (%s) VALUES (%s)' % (table,
