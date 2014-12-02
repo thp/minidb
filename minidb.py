@@ -220,7 +220,7 @@ class Store(object):
             pk = getattr(o, pk_name)
             assert pk is not None
 
-            res = self._execute('DELETE FROM %s WHERE %s=?' % (table, pk_name), [pk])
+            res = self._execute('DELETE FROM %s WHERE %s = ?' % (table, pk_name), [pk])
             setattr(o, pk_name, None)
 
     def _update(self, o):
@@ -249,7 +249,7 @@ class Store(object):
 
                 yield getattr(o, pk_name)
 
-            res = self._execute('UPDATE %s SET %s WHERE %s=?' % (table,
+            res = self._execute('UPDATE %s SET %s WHERE %s = ?' % (table,
                                   ', '.join(gen_keys()), pk_name),
                                   list(gen_values()))
 
@@ -275,7 +275,7 @@ class Store(object):
             table, slots = self._schema(class_)
             sql = 'DELETE FROM %s' % (table,)
             if kwargs:
-                sql += ' WHERE %s' % (' AND '.join('%s=?' % k for k in kwargs))
+                sql += ' WHERE %s' % (' AND '.join('%s = ?' % k for k in kwargs))
             return self._execute(sql, kwargs.values()).rowcount > 0
 
     def delete_where(self, class_, where):
@@ -380,7 +380,7 @@ class Store(object):
                 sql += ' WHERE %s' % ssql
                 sql_args = aargs
             elif kwargs:
-                sql += ' WHERE %s' % (' AND '.join('%s=?' % k for k in kwargs))
+                sql += ' WHERE %s' % (' AND '.join('%s = ?' % k for k in kwargs))
                 sql_args = list(kwargs.values())
             else:
                 sql_args = []
