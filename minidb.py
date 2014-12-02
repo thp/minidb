@@ -151,7 +151,7 @@ class Store(object):
             def column(name, type_):
                 if (name, type_) == self.PRIMARY_KEY:
                     return 'id INTEGER PRIMARY KEY'
-                elif type_ in (int,):
+                elif type_ in (int, bool):
                     return '{name} INTEGER'.format(name=name)
                 elif type_ in (float,):
                     return '{name} REAL'.format(name=name)
@@ -186,6 +186,10 @@ class Store(object):
             return None
         elif hasattr(t, '__minidb_serialize__'):
             return t.__minidb_serialize__(v)
+        elif isinstance(v, bool):
+            return int(v)
+        elif isinstance(v, float):
+            return v
         elif isinstance(v, str):
             return v
 
@@ -198,6 +202,8 @@ class Store(object):
             return t.__minidb_deserialize__(v)
         elif isinstance(v, t):
             return v
+        elif t == bool:
+            return bool(v)
 
         return t(v)
 
@@ -410,9 +416,12 @@ class Operation(object):
 
         raise ValueError('Cannot determine class for query')
 
-    def query(self, db, order_by=None, group_by=None, limit=None):
-        return self._get_class(self.a).query(db, self, order_by=order_by,
-                                             group_by=group_by, limit=limit)
+    def query(self, db, where=None, order_by=None, group_by=None, limit=None):
+        return self._get_class(self.a).query(db, self,
+                                             where=where,
+                                             order_by=order_by,
+                                             group_by=group_by,
+                                             limit=limit)
 
     def __floordiv__(self, other):
         if self.b is not None:
@@ -539,8 +548,8 @@ class OperatorMixin(object):
 
     __call__ = lambda a, name: RenameOperation(a, name)
     tosql = lambda a: Operation(a).tosql()
-    query = lambda a, db, order_by=None, group_by=None, limit=None: \
-            Operation(a).query(db, order_by=order_by, group_by=group_by,
+    query = lambda a, db, where=None, order_by=None, group_by=None, limit=None: \
+            Operation(a).query(db, where=where, order_by=order_by, group_by=group_by,
                     limit=limit)
     __floordiv__ = lambda a, b: Sequence([a, b])
 
@@ -802,6 +811,8 @@ class Model(metaclass=MetaModel):
             print('Storing id={} in cache {}'.format(self.id, self))
             weakref.finalize(self, self.__class__._finalize, self.id)
         self.__class__.__minidb_cache__[self.id] = self
+
+        return self
 
     def delete(self):
         if getattr(self, Store.MINIDB_ATTR) is None:

@@ -239,3 +239,32 @@ def test_field_conversion_query_select_star():
         assert isinstance(result.jsonlist, list)
         assert isinstance(result.jsondict, dict)
         assert result.jsonnone is None
+
+
+def test_storing_and_retrieving_booleans():
+    class BooleanModel(minidb.Model):
+        value = bool
+
+    with minidb.Store(debug=True) as db:
+        db.register(BooleanModel)
+        true_id = BooleanModel(value=True).save(db).id
+        false_id = BooleanModel(value=False).save(db).id
+        assert BooleanModel.get(db, id=true_id).value is True
+        assert BooleanModel.get(db, id=false_id).value is False
+        assert next(BooleanModel.c.value.query(db, where=lambda c: c.id == true_id)).value is True
+        assert next(BooleanModel.c.value.query(db, where=lambda c: c.id == false_id)).value is False
+
+
+def test_storing_and_retrieving_floats():
+    class FloatModel(minidb.Model):
+        value = float
+
+    with minidb.Store(debug=True) as db:
+        db.register(FloatModel)
+        float_id = FloatModel(value=3.1415).save(db).id
+        get_value = FloatModel.get(db, id=float_id).value
+        assert type(get_value) == float
+        assert get_value == 3.1415
+        query_value = next(FloatModel.c.value.query(db, where=lambda c: c.id == float_id)).value
+        assert type(query_value) == float
+        assert query_value == 3.1415
