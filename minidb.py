@@ -190,7 +190,7 @@ class Store(object):
             return t.__minidb_serialize__(v)
         elif isinstance(v, bool):
             return int(v)
-        elif isinstance(v, (float, bytes)):
+        elif isinstance(v, (int, float, bytes)):
             return v
 
         return str(v)
@@ -281,6 +281,10 @@ class Store(object):
     def delete_where(self, class_, where):
         with self.lock:
             table, slots = self._schema(class_)
+
+            if isinstance(where, types.FunctionType):
+                # Late-binding of where
+                where = where(class_.c)
 
             ssql, args = where.tosql()
             sql = 'DELETE FROM %s WHERE %s' % (table, ssql)

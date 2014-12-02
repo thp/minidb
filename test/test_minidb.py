@@ -310,3 +310,18 @@ def test_get_with_no_value_returns_none():
     with minidb.Store(debug=True) as db:
         db.register(Mod)
         assert Mod.get(db, mod='foo') is None
+
+
+def test_delete_where():
+    class DeleteWhere(minidb.Model):
+        v = int
+
+    with minidb.Store(debug=True) as db:
+        db.register(DeleteWhere)
+
+        for i in range(10):
+            DeleteWhere(v=i).save(db)
+
+        assert DeleteWhere.delete_where(db, lambda c: c.v < 2) == len({0, 1})
+        assert DeleteWhere.delete_where(db, DeleteWhere.c.v > 5) == len({6, 7, 8, 9})
+        assert {2, 3, 4, 5} == {v for (v,) in DeleteWhere.c.v.query(db)}
