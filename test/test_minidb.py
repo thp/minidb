@@ -268,3 +268,45 @@ def test_storing_and_retrieving_floats():
         query_value = next(FloatModel.c.value.query(db, where=lambda c: c.id == float_id)).value
         assert type(query_value) == float
         assert query_value == 3.1415
+
+
+def test_storing_and_retrieving_bytes():
+    # http://probablyprogramming.com/2009/03/15/the-tiniest-gif-ever
+    BLOB = (b'GIF89a\x01\x00\x01\x00\x80\x01\x00\xff\xff\xff\x00\x00\x00' +
+            b'!\xf9\x04\x01\n\x00\x01\x00,\x00\x00\x00\x00\x01\x00\x01' +
+            b'\x00\x00\x02\x02L\x01\x00;')
+
+    class BytesModel(minidb.Model):
+        value = bytes
+
+    with minidb.Store(debug=True) as db:
+        db.register(BytesModel)
+        bytes_id = BytesModel(value=BLOB).save(db).id
+        get_value = BytesModel.get(db, id=bytes_id).value
+        assert type(get_value) == bytes
+        assert get_value == BLOB
+        query_value = next(BytesModel.c.value.query(db, where=lambda c: c.id == bytes_id)).value
+        assert type(query_value) == bytes
+        assert query_value == BLOB
+
+
+
+@raises(ValueError)
+def test_get_with_multiple_value_raises_exception():
+    class Mod(minidb.Model):
+        mod = str
+
+    with minidb.Store(debug=True) as db:
+        db.register(Mod)
+        Mod(mod='foo').save(db)
+        Mod(mod='foo').save(db)
+        Mod.get(db, mod='foo')
+
+
+def test_get_with_no_value_returns_none():
+    class Mod(minidb.Model):
+        mod = str
+
+    with minidb.Store(debug=True) as db:
+        db.register(Mod)
+        assert Mod.get(db, mod='foo') is None

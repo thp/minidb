@@ -155,6 +155,8 @@ class Store(object):
                     return '{name} INTEGER'.format(name=name)
                 elif type_ in (float,):
                     return '{name} REAL'.format(name=name)
+                elif type_ in (bytes,):
+                    return '{name} BLOB'.format(name=name)
                 else:
                     return '{name} TEXT'.format(name=name)
 
@@ -188,9 +190,7 @@ class Store(object):
             return t.__minidb_serialize__(v)
         elif isinstance(v, bool):
             return int(v)
-        elif isinstance(v, float):
-            return v
-        elif isinstance(v, str):
+        elif isinstance(v, (float, bytes)):
             return v
 
         return str(v)
@@ -202,8 +202,6 @@ class Store(object):
             return t.__minidb_deserialize__(v)
         elif isinstance(v, t):
             return v
-        elif t == bool:
-            return bool(v)
 
         return t(v)
 
@@ -394,7 +392,15 @@ class Store(object):
             return (x for x in (apply(row) for row in cur) if x is not None)
 
     def get(self, class_, *args, **kwargs):
-        return next(self.load(class_, *args, **kwargs), None)
+        it = self.load(class_, *args, **kwargs)
+        result = next(it, None)
+
+        try:
+            next(it)
+        except StopIteration:
+            return result
+
+        raise ValueError('More than one row returned')
 
 
 class Operation(object):
@@ -759,6 +765,9 @@ class Model(metaclass=MetaModel):
 
     @classmethod
     def __lookup_single(cls, o):
+        if o is None:
+            return None
+
         cache = cls.__minidb_cache__
         if o.id not in cache:
             if DEBUG_OBJECT_CACHE:
