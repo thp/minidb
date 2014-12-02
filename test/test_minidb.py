@@ -500,3 +500,18 @@ def test_double_delete_without_id_raises_valueerror():
         a.delete()
         assert a.id is None
         a.delete()
+
+
+def test_default_values_are_set_if_none():
+    class Foo(minidb.Model):
+        name = str
+
+        class __minidb_defaults__:
+            name = 'Bob'
+
+    with minidb.Store(debug=True) as db:
+        f = Foo()
+        eq_(f.name, 'Bob')
+
+        f = Foo(name='John')
+        eq_(f.name, 'John')

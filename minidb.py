@@ -70,6 +70,8 @@ def _get_all_slots(class_, include_private=False):
 
 
 def _set_attribute(o, slot, cls, value):
+    if value is None and hasattr(o.__class__, '__minidb_defaults__'):
+        value = getattr(o.__class__.__minidb_defaults__, slot, None)
     if value is not None and not hasattr(cls, '__minidb_deserialize__'):
         value = cls(value)
     setattr(o, slot, value)
