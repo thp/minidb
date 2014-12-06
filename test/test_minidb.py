@@ -590,6 +590,18 @@ def test_storing_and_retrieving_datetime():
         assert query_value.tm == T_NOW
 
 
+def test_query_with_datetime():
+    DT_NOW = datetime.datetime.now()
+
+    class DateTimeModel(minidb.Model):
+        dt = datetime.datetime
+
+    with minidb.Store(debug=True) as db:
+        db.register(DateTimeModel)
+        datetime_id = DateTimeModel(dt=DT_NOW).save(db).id
+        assert DateTimeModel.get(db, lambda c: c.dt == DT_NOW).id == datetime_id
+
+
 def test_custom_converter():
     class Point(object):
         def __init__(self, x, y):

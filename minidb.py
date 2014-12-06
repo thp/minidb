@@ -514,6 +514,8 @@ class Operation(object):
             return ['%s' % ', '.join(sqls), argss]
         elif isinstance(arg, Literal):
             return [arg.name, []]
+        if type(arg) in CONVERTERS:
+            return ('?', [CONVERTERS[type(arg)](arg, True)])
 
         return ('?', [arg])
 
