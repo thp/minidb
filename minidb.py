@@ -88,7 +88,7 @@ def _set_attribute(o, slot, cls, value):
         if isinstance(value, types.FunctionType):
             # Late-binding of default lambda (taking o as argument)
             value = value(o)
-    if value is not None and cls not in CONVERTERS:
+    if value is not None and cls not in CONVERTERS and not issubclass(cls, Model):
         value = cls(value)
     setattr(o, slot, value)
 
@@ -225,6 +225,10 @@ class Store(object):
     def serialize(self, v, t):
         if v is None:
             return None
+        if issubclass(t, Model):
+            if v.id is None:
+                raise ValueError('Object is not yet persisted: {!r}'.format(v))
+            return v.id
         elif t in CONVERTERS:
             return CONVERTERS[t](v, True)
         elif isinstance(v, bool):
@@ -237,6 +241,8 @@ class Store(object):
     def deserialize(self, v, t):
         if v is None:
             return None
+        elif issubclass(t, Model):
+            return self.get(t, id=v)
         elif t in CONVERTERS:
             return CONVERTERS[t](v, False)
         elif isinstance(v, t):
@@ -277,11 +283,18 @@ class Store(object):
             else:
                 existing = {}
 
+            def value_differs(a, b, type_):
+                if issubclass(type_, Model):
+                    return a.id != b.id
+                else:
+                    return a != b
+
             values = [(name, type_, getattr(o, name, None))
                       for name, type_ in slots
                       if (name, type_) != self.PRIMARY_KEY and
                       (name not in existing or
-                       getattr(o, name, None) != existing[name])]
+                       value_differs(getattr(o, name, None),
+                                     existing[name], type_))]
 
             if self.smartupdate and self.debug:
                 for name, type_, to_value in values:
@@ -431,7 +444,7 @@ class Store(object):
                 sql_args = aargs
             elif kwargs:
                 sql += ' WHERE %s' % (' AND '.join('%s = ?' % k for k in kwargs))
-                sql_args = list(kwargs.values())
+                sql_args = list((v.id if isinstance(v, Model) else v) for v in kwargs.values())
             else:
                 sql_args = []
             cur = self._execute(sql, sql_args)
@@ -491,6 +504,8 @@ class Operation(object):
     def argtosql(self, arg):
         if isinstance(arg, Operation):
             return arg.tosql(self.brackets)
+        elif isinstance(arg, Model):
+            return ('?', [arg.id])
         elif isinstance(arg, Column):
             return (arg.name, [])
         elif isinstance(arg, RenameOperation):
@@ -940,14 +955,18 @@ class Model(metaclass=MetaModel):
         getattr(self, Store.MINIDB_ATTR).delete_by_pk(self)
 
     @classmethod
-    def delete_where(cls, db, query):
-        return db.delete_where(cls, query)
+    def delete_where(cls, db, where):
+        return db.delete_where(cls, where)
 
     @classmethod
     def query(cls, db, select=None, where=None, order_by=None, group_by=None,
             limit=None):
         return db.query(cls, select=select, where=where, order_by=order_by,
                 group_by=group_by, limit=limit)
+
+    @classmethod
+    def count(cls, db, where=None):
+        return next(cls.c.id.count('count').query(db, where=where)).count
 
     @classmethod
     def pquery(cls, db, select=None, where=None, order_by=None, group_by=None,

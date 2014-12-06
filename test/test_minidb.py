@@ -618,3 +618,68 @@ def test_custom_converter():
                                         where=lambda c: c.id == player_id))
         assert type(query_value.position) == Point
         assert (query_value.position.x, query_value.position.y) == (p.x, p.y)
+
+
+def test_count():
+    class Foo(minidb.Model):
+        bar = int
+
+    with minidb.Store(debug=True) as db:
+        db.register(Foo)
+        for i in range(10):
+            Foo(bar=i).save(db)
+        assert Foo.count(db) == 10
+        assert Foo.count(db, lambda c: c.bar > 0) == 9
+
+
+@raises(ValueError)
+def test_foreign_key_not_yet_persisted():
+    class Location(minidb.Model):
+        x = float
+        y = float
+
+    class PointOfInterest(minidb.Model):
+        location = Location
+
+    with minidb.Store(debug=True) as db:
+        db.register(Location)
+        db.register(PointOfInterest)
+        PointOfInterest(location=Location(x=10, y=20)).save(db)
+
+
+def test_foreign_key_object():
+    class Location(minidb.Model):
+        x = float
+        y = float
+
+    class PointOfInterest(minidb.Model):
+        name = str
+        location = Location
+
+    with minidb.Store(debug=True, smartupdate=True) as db:
+        db.register(Location)
+        db.register(PointOfInterest)
+        location = Location(x=10, y=20).save(db)
+        p = PointOfInterest(name='Foo', location=location).save(db)
+        assert PointOfInterest.count(db) == 1
+        assert Location.count(db) == 1
+
+        for poi in PointOfInterest.load(db):
+            assert poi.location.x == 10
+            poi.location.x *= 2
+            poi.save()
+            poi.location.save()
+            assert Location.count(db) == 1
+            poi.location = Location(x=40, y=30).save(db)
+            poi.save()
+            assert Location.count(db) == 2
+
+        for location in Location.load(db):
+            poi = PointOfInterest.get(db, location=location)
+            assert poi is None or poi.location is location
+            poi = PointOfInterest.get(db, lambda c: c.location == location)
+            assert poi is None or poi.location is location
+
+        for location in Location.load(db):
+            if PointOfInterest.get(db, location=location) is None:
+                location.delete()
