@@ -38,12 +38,16 @@ __all__ = [
     # Utility functions
     'columns', 'func', 'literal',
 
+    # Decorator for registering converters
+    'converter_for',
+
     # Debugging utilities
     'pprint', 'pformat',
 ]
 
 
 DEBUG_OBJECT_CACHE = False
+CONVERTERS = {}
 
 
 import sqlite3
@@ -55,10 +59,19 @@ import collections
 import weakref
 import sys
 import json
+import datetime
 
 
 class UnknownClass(TypeError):
     ...
+
+
+def converter_for(type_):
+    def decorator(f):
+        CONVERTERS[type_] = f
+        return f
+
+    return decorator
 
 
 def _get_all_slots(class_, include_private=False):
@@ -75,7 +88,7 @@ def _set_attribute(o, slot, cls, value):
         if isinstance(value, types.FunctionType):
             # Late-binding of default lambda (taking o as argument)
             value = value(o)
-    if value is not None and not hasattr(cls, '__minidb_deserialize__'):
+    if value is not None and cls not in CONVERTERS:
         value = cls(value)
     setattr(o, slot, value)
 
@@ -212,8 +225,8 @@ class Store(object):
     def serialize(self, v, t):
         if v is None:
             return None
-        elif hasattr(t, '__minidb_serialize__'):
-            return t.__minidb_serialize__(v)
+        elif t in CONVERTERS:
+            return CONVERTERS[t](v, True)
         elif isinstance(v, bool):
             return int(v)
         elif isinstance(v, (int, float, bytes)):
@@ -224,8 +237,8 @@ class Store(object):
     def deserialize(self, v, t):
         if v is None:
             return None
-        elif hasattr(t, '__minidb_deserialize__'):
-            return t.__minidb_deserialize__(v)
+        elif t in CONVERTERS:
+            return CONVERTERS[t](v, False)
         elif isinstance(v, t):
             return v
 
@@ -778,14 +791,58 @@ def pprint(result, color=False):
 
 
 class JSON(object):
-    @classmethod
-    def __minidb_serialize__(cls, d):
-        return json.dumps(d)
+    ...
 
-    @classmethod
-    def __minidb_deserialize__(cls, s):
-        assert isinstance(s, str)
-        return json.loads(s)
+
+@converter_for(JSON)
+def convert_json(v, serialize):
+    return json.dumps(v) if serialize else json.loads(v)
+
+
+@converter_for(datetime.datetime)
+def convert_datetime_datetime(v, serialize):
+    """
+    >>> convert_datetime_datetime(datetime.datetime(2014, 12, 13, 14, 15), True)
+    '2014-12-13T14:15:00'
+    >>> convert_datetime_datetime('2014-12-13T14:15:16', False)
+    datetime.datetime(2014, 12, 13, 14, 15, 16)
+    """
+    if serialize:
+        return v.isoformat()
+    else:
+        isoformat, microseconds = (v.rsplit('.', 1) if '.' in v else (v, 0))
+        return (datetime.datetime.strptime(isoformat, '%Y-%m-%dT%H:%M:%S') +
+                datetime.timedelta(microseconds=int(microseconds)))
+
+
+@converter_for(datetime.date)
+def convert_datetime_date(v, serialize):
+    """
+    >>> convert_datetime_date(datetime.date(2014, 12, 13), True)
+    '2014-12-13'
+    >>> convert_datetime_date('2014-12-13', False)
+    datetime.date(2014, 12, 13)
+    """
+    if serialize:
+        return v.isoformat()
+    else:
+        return datetime.datetime.strptime(v, '%Y-%m-%d').date()
+
+
+@converter_for(datetime.time)
+def convert_datetime_time(v, serialize):
+    """
+    >>> convert_datetime_time(datetime.time(14, 15, 16), True)
+    '14:15:16'
+    >>> convert_datetime_time('14:15:16', False)
+    datetime.time(14, 15, 16)
+    """
+    if serialize:
+        return v.isoformat()
+    else:
+        isoformat, microseconds = (v.rsplit('.', 1) if '.' in v else (v, 0))
+        return (datetime.datetime.strptime(isoformat, '%H:%M:%S') +
+                datetime.timedelta(microseconds=int(microseconds))).time()
 
 
 class Model(metaclass=MetaModel):

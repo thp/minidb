@@ -1,5 +1,8 @@
 import minidb
+
 from nose.tools import *
+
+import datetime
 
 
 class FieldTest(minidb.Model):
@@ -555,3 +558,63 @@ def test_default_values_with_callable():
         f = Foo(name='Joe', email='joe@example.net')
         eq_(f.name, 'Joe')
         eq_(f.email, 'joe@example.net')
+
+
+def test_storing_and_retrieving_datetime():
+    DT_NOW = datetime.datetime.now()
+    D_TODAY = datetime.date.today()
+    T_NOW = datetime.datetime.now().time()
+
+    class DateTimeModel(minidb.Model):
+        dt = datetime.datetime
+        da = datetime.date
+        tm = datetime.time
+
+    with minidb.Store(debug=True) as db:
+        db.register(DateTimeModel)
+        datetime_id = DateTimeModel(dt=DT_NOW, da=D_TODAY, tm=T_NOW).save(db).id
+        get_value = DateTimeModel.get(db, id=datetime_id)
+        assert type(get_value.dt) == datetime.datetime
+        assert get_value.dt == DT_NOW
+        assert type(get_value.da) == datetime.date
+        assert get_value.da == D_TODAY
+        assert type(get_value.tm) == datetime.time
+        assert get_value.tm == T_NOW
+        query_value = next(DateTimeModel.query(db, lambda c: c.dt // c.da // c.tm,
+                                               where=lambda c: c.id == datetime_id))
+        assert type(query_value.dt) == datetime.datetime
+        assert query_value.dt == DT_NOW
+        assert type(query_value.da) == datetime.date
+        assert query_value.da == D_TODAY
+        assert type(query_value.tm) == datetime.time
+        assert query_value.tm == T_NOW
+
+
+def test_custom_converter():
+    class Point(object):
+        def __init__(self, x, y):
+            self.x = x
+            self.y = y
+
+    @minidb.converter_for(Point)
+    def convert_point(v, serialize):
+        if serialize:
+            return ','.join(str(x) for x in (v.x, v.y))
+        else:
+            return Point(*(float(x) for x in v.split(',')))
+
+    class Player(minidb.Model):
+        name = str
+        position = Point
+
+    with minidb.Store(debug=True) as db:
+        db.register(Player)
+        p = Point(1.12, 5.99)
+        player_id = Player(name='Foo', position=p).save(db).id
+        get_value = Player.get(db, id=player_id)
+        assert type(get_value.position) == Point
+        assert (get_value.position.x, get_value.position.y) == (p.x, p.y)
+        query_value = next(Player.query(db, lambda c: c.position,
+                                        where=lambda c: c.id == player_id))
+        assert type(query_value.position) == Point
+        assert (query_value.position.x, query_value.position.y) == (p.x, p.y)
