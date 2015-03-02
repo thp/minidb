@@ -60,6 +60,10 @@ import weakref
 import sys
 import json
 import datetime
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class UnknownClass(TypeError):
@@ -146,11 +150,11 @@ class Store(object):
     def _execute(self, sql, args=None):
         if args is None:
             if self.debug:
-                print('    :', sql)
+                logger.debug('%s', sql)
             return self.db.execute(sql)
         else:
             if self.debug:
-                print('    :', sql, args)
+                logger.debug('%s %r', sql, args)
             return self.db.execute(sql, args)
 
     def _schema(self, class_):
@@ -285,7 +289,7 @@ class Store(object):
 
             if self.smartupdate and self.debug:
                 for name, type_, to_value in values:
-                    print('    #', '{}(id={})'.format(table, o.id),
+                    logger.debug('%s %s', '{}(id={})'.format(table, o.id),
                           '{}: {} -> {}'.format(name, existing[name], to_value))
 
             if not values:
@@ -853,7 +857,8 @@ class Model(metaclass=MetaModel):
 
     @classmethod
     def _finalize(cls, id):
-        print('Finalizing {} id={}'.format(cls.__name__, id))
+        if DEBUG_OBJECT_CACHE:
+            logger.debug('Finalizing {} id={}'.format(cls.__name__, id))
 
     def __repr__(self):
         def get_attrs():
@@ -874,12 +879,12 @@ class Model(metaclass=MetaModel):
         cache = cls.__minidb_cache__
         if o.id not in cache:
             if DEBUG_OBJECT_CACHE:
-                print('Storing id={} in cache {}'.format(o.id, o))
+                logger.debug('Storing id={} in cache {}'.format(o.id, o))
                 weakref.finalize(o, cls._finalize, o.id)
             cache[o.id] = o
         else:
             if DEBUG_OBJECT_CACHE:
-                print('Getting id={} from cache'.format(o.id))
+                logger.debug('Getting id={} from cache'.format(o.id))
         return cache[o.id]
 
     @classmethod
@@ -920,7 +925,7 @@ class Model(metaclass=MetaModel):
         getattr(self, Store.MINIDB_ATTR).save_or_update(self)
 
         if DEBUG_OBJECT_CACHE:
-            print('Storing id={} in cache {}'.format(self.id, self))
+            logger.debug('Storing id={} in cache {}'.format(self.id, self))
             weakref.finalize(self, self.__class__._finalize, self.id)
         self.__class__.__minidb_cache__[self.id] = self
 
@@ -936,7 +941,7 @@ class Model(metaclass=MetaModel):
         cache = self.__class__.__minidb_cache__
         if self.id in cache:
             if DEBUG_OBJECT_CACHE:
-                print('Dropping id={} from cache {}'.format(self.id, self))
+                logger.debug('Dropping id={} from cache {}'.format(self.id, self))
             del cache[self.id]
 
         getattr(self, Store.MINIDB_ATTR).delete_by_pk(self)
