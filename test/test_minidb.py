@@ -54,7 +54,6 @@ class FieldTest(minidb.Model):
         self._private3 = new_value
 
 
-
 class FieldConversion(minidb.Model):
     integer = int
     floating = float
@@ -225,7 +224,6 @@ def test_field_conversion_get_object():
         assert result.jsonnone is None
 
 
-
 def test_field_conversion_query_select_star():
     with minidb.Store(debug=True) as db:
         db.register(FieldConversion)
@@ -295,7 +293,6 @@ def test_storing_and_retrieving_bytes():
         assert query_value == BLOB
 
 
-
 @raises(ValueError)
 def test_get_with_multiple_value_raises_exception():
     class Mod(minidb.Model):
@@ -330,7 +327,6 @@ def test_delete_where():
         assert DeleteWhere.delete_where(db, lambda c: c.v < 2) == len({0, 1})
         assert DeleteWhere.delete_where(db, DeleteWhere.c.v > 5) == len({6, 7, 8, 9})
         assert {2, 3, 4, 5} == {v for (v,) in DeleteWhere.c.v.query(db)}
-
 
 
 @raises(AttributeError)

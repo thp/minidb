@@ -54,7 +54,6 @@ class AdvancedPerson(Person):
     advanced_y = float
 
 
-
 class WithoutConstructor(minidb.Model):
     name = str
     age = int
@@ -70,8 +69,10 @@ print(Person.__custom_class_attribute__)
 Person.cm_foo()
 Person.sm_bar()
 
+
 class FooObject(object):
     pass
+
 
 with minidb.Store(debug=True) as db:
     db.register(Person)
@@ -85,7 +86,7 @@ with minidb.Store(debug=True) as db:
         print(aperson)
 
     for i in range(5):
-        w = WithoutConstructor(name='x', age=10+3*i)
+        w = WithoutConstructor(name='x', age=10 + 3 * i)
         w.height = w.age * 3.33
         w.save(db)
         print(w)
@@ -97,14 +98,14 @@ with minidb.Store(debug=True) as db:
         print(w2)
 
     for i in range(3):
-        p = Person(FooObject(), username='foo'*i)
+        p = Person(FooObject(), username='foo' * i)
         print(p)
         p.save(db)
         print(p)
         p.username *= 3
         p.save()
         pp = Person(FooObject())
-        pp.username = 'bar'*i
+        pp.username = 'bar' * i
         print(pp)
         pp.save(db)
         print(pp)
@@ -112,8 +113,8 @@ with minidb.Store(debug=True) as db:
     print('loader is:', Person.load(db))
 
     print('query')
+    # for person in db.load(Person, FooObject()):
     for person in Person.load(db)(FooObject()):
-    #for person in db.load(Person, FooObject()):
         print(person)
         if person.username == '':
             print('delete')
@@ -135,7 +136,7 @@ with minidb.Store(debug=True) as db:
     print('requery')
     print({p.id: p for p in Person.load(db)(FooObject())})
     person = Person.get(db, id=3)(FooObject())
-    #person = db.get(Person, FooObject(), id=2)
+    # person = db.get(Person, FooObject(), id=2)
     print(person)
     person.send_email()
     print('a_property:', person.a_property)
@@ -157,7 +158,7 @@ with minidb.Store(debug=True) as db:
     print('select with query builder')
     print('columns:', Person.c)
     query = (Person.c.id < 1000) & Person.c.username.like('%foo%') & (Person.c.username != None)
-    #Person.load(db, Person.id < 1000 & Person.username.like('%foo%'))
+    # Person.load(db, Person.id < 1000 & Person.username.like('%foo%'))
     print('query:', query)
     print({p.id: p for p in Person.load(db, query)(FooObject())})
     print('deleting all persons with a short username')
@@ -169,15 +170,15 @@ with minidb.Store(debug=True) as db:
                                                   Person.c.username.lower('down'),
                                                   Person.c.foo('foox'),
                                                   Person.c.foo),
-                                                  where=(Person.c.id == p.id),
-                                                  order_by=minidb.columns(Person.c.id.desc,
-                                                                          Person.c.username.length.asc),
-                                                  limit=1))
+                               where=(Person.c.id == p.id),
+                               order_by=minidb.columns(Person.c.id.desc,
+                                                       Person.c.username.length.asc),
+                               limit=1))
         print(p.id, p.username, p.mail, uu)
 
-    print('='*30)
+    print('=' * 30)
     print('queries')
-    print('='*30)
+    print('=' * 30)
 
     highest_id = next(Person.query(db, Person.c.id.max('max'))).max
     print('highest id:', highest_id)
@@ -194,17 +195,18 @@ with minidb.Store(debug=True) as db:
     print('multi-column query:')
     for row in WithoutConstructor.query(db, minidb.columns(WithoutConstructor.c.age,
                                                            WithoutConstructor.c.height),
-                                                           order_by=WithoutConstructor.c.age.desc,
-                                                           limit=50):
+                                        order_by=WithoutConstructor.c.age.desc,
+                                        limit=50):
         print('got:', dict(row))
 
     print('multi-column query (direct)')
     print([dict(x) for x in minidb.columns(WithoutConstructor.c.age,
-                              WithoutConstructor.c.height).query(db,
-                              order_by=WithoutConstructor.c.height.desc)])
+                                           WithoutConstructor.c.height).query(
+                                               db, order_by=WithoutConstructor.c.height.desc)])
 
     print('order by multiple with then')
-    print(list(WithoutConstructor.c.age.query(db, order_by=WithoutConstructor.c.height.asc // WithoutConstructor.c.age.desc)))
+    print(list(WithoutConstructor.c.age.query(db, order_by=(WithoutConstructor.c.height.asc //
+                                                            WithoutConstructor.c.age.desc))))
 
     print('order by shortcut with late-binding column lambda as dictionary')
     print(list(WithoutConstructor.c.age.query(db, order_by=lambda c: c.height.asc // c.age.desc)))
@@ -218,8 +220,10 @@ with minidb.Store(debug=True) as db:
         print(age)
 
     print('late-binding column lambda')
-    for name, age, height, random in WithoutConstructor.query(db, lambda c: c.name // c.age // c.height // minidb.func.random(),
-            order_by=lambda c: c.height.desc // minidb.func.random().asc):
+    for name, age, height, random in WithoutConstructor.query(db, lambda c: (c.name // c.age //
+                                                                             c.height // minidb.func.random()),
+                                                              order_by=lambda c: (c.height.desc //
+                                                                                  minidb.func.random().asc)):
         print('got:', name, age, height, random)
 
     print(minidb.func.max(1, Person.c.username, 3, minidb.func.random()).tosql())
@@ -247,21 +251,20 @@ with minidb.Store(debug=True) as db:
     Person.pquery(db)
 
     print('With payload (JSON)')
-    WithPayload(payload={'a': [1]*3}).save(db)
+    WithPayload(payload={'a': [1] * 3}).save(db)
     for payload in WithPayload.load(db):
         print('foo', payload)
 
     print(next(WithPayload.c.payload.query(db)))
 
 
-
 def cached_person_main(with_delete=None):
     if with_delete is None:
         for i in range(2):
             cached_person_main(i)
-        print('='*77)
+        print('=' * 77)
         return
-    print('='*20, 'Cached Person Main, with_delete =', with_delete, '='*20)
+    print('=' * 20, 'Cached Person Main, with_delete =', with_delete, '=' * 20)
 
     debug_object_cache, minidb.DEBUG_OBJECT_CACHE = minidb.DEBUG_OBJECT_CACHE, True
 
@@ -283,4 +286,3 @@ def cached_person_main(with_delete=None):
     minidb.DEBUG_OBJECT_CACHE = debug_object_cache
 
 cached_person_main()
-

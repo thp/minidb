@@ -126,7 +126,6 @@ class RowProxy(object):
         return self._keys
 
 
-
 class Store(object):
     PRIMARY_KEY = ('id', int)
     MINIDB_ATTR = '_minidb'
@@ -191,23 +190,21 @@ class Store(object):
             if available:
                 available = [(row[1], row[2]) for row in available]
 
-                modify_slots = [(name, type_) for name, type_ in slots
-                                if name in (name for name, _ in available) and
+                modify_slots = [(name, type_) for name, type_ in slots if name in (name for name, _ in available) and
                                 (name, column(name, type_, False)) not in available]
                 for name, type_ in modify_slots:
-                    raise TypeError('Column {} is {}, but expected {}'.format(name,
-                        next(dbtype for n, dbtype in available if n == name),
-                        column(name, type_)))
+                    raise TypeError('Column {} is {}, but expected {}'.format(name, next(dbtype for n, dbtype in
+                                                                                         available if n == name),
+                                                                              column(name, type_)))
 
                 # TODO: What to do with extraneous columns?
 
-                missing_slots = [(name, type_) for name, type_ in slots
-                                 if name not in (n for n, _ in available)]
+                missing_slots = [(name, type_) for name, type_ in slots if name not in (n for n, _ in available)]
                 for name, type_ in missing_slots:
                     self._execute('ALTER TABLE %s ADD COLUMN %s %s' % (table, name, column(name, type_)))
             else:
                 self._execute('CREATE TABLE %s (%s)' % (table, ', '.join('{} {}'.format(name, column(name, type_))
-                    for name, type_ in slots)))
+                                                                         for name, type_ in slots)))
 
     def register(self, class_, upgrade=False):
         if not issubclass(class_, Model):
@@ -216,8 +213,7 @@ class Store(object):
         if class_ in self.registered.values():
             raise TypeError('{} is already registered'.format(class_.__name__))
         elif class_.__name__ in self.registered and not upgrade:
-            raise TypeError('{} is already registered {}'.format(class_.__name__,
-                                                                 self.registered[class_.__name__]))
+            raise TypeError('{} is already registered {}'.format(class_.__name__, self.registered[class_.__name__]))
 
         with self.lock:
             self.registered[class_.__name__] = class_
@@ -276,21 +272,18 @@ class Store(object):
 
             if self.smartupdate:
                 existing = dict(next(self.query(o.__class__, where=lambda c:
-                                                getattr(c, pk_name) ==
-                                                getattr(o, pk_name))))
+                                                getattr(c, pk_name) == getattr(o, pk_name))))
             else:
                 existing = {}
 
             values = [(name, type_, getattr(o, name, None))
-                      for name, type_ in slots
-                      if (name, type_) != self.PRIMARY_KEY and
-                      (name not in existing or
-                       getattr(o, name, None) != existing[name])]
+                      for name, type_ in slots if (name, type_) != self.PRIMARY_KEY and
+                      (name not in existing or getattr(o, name, None) != existing[name])]
 
             if self.smartupdate and self.debug:
                 for name, type_, to_value in values:
                     logger.debug('%s %s', '{}(id={})'.format(table, o.id),
-                          '{}: {} -> {}'.format(name, existing[name], to_value))
+                                 '{}: {} -> {}'.format(name, existing[name], to_value))
 
             if not values:
                 # No values have changed - nothing to update
@@ -310,23 +303,18 @@ class Store(object):
 
                 yield getattr(o, pk_name)
 
-            self._execute('UPDATE %s SET %s WHERE %s = ?' % (table,
-                          ', '.join(gen_keys()), pk_name),
-                          list(gen_values()))
+            self._execute('UPDATE %s SET %s WHERE %s = ?' % (table, ', '.join(gen_keys()), pk_name), list(gen_values()))
 
     def save(self, o):
         with self.lock:
             table, slots = self._schema(o.__class__)
 
             # Save all values except for the primary key
-            slots = [(name, type_) for name, type_ in slots
-                     if (name, type_) != self.PRIMARY_KEY]
+            slots = [(name, type_) for name, type_ in slots if (name, type_) != self.PRIMARY_KEY]
 
             values = [self.serialize(getattr(o, name), type_) for name, type_ in slots]
-            return self._execute('INSERT INTO %s (%s) VALUES (%s)' % (table,
-                                  ', '.join(name for name, type_ in slots),
-                                  ', '.join('?'*len(slots))),
-                                  values).lastrowid
+            return self._execute('INSERT INTO %s (%s) VALUES (%s)' % (table, ', '.join(name for name, type_ in slots),
+                                                                      ', '.join('?' * len(slots))), values).lastrowid
 
     def delete_where(self, class_, where):
         with self.lock:
@@ -340,8 +328,7 @@ class Store(object):
             sql = 'DELETE FROM %s WHERE %s' % (table, ssql)
             return self._execute(sql, args).rowcount
 
-    def query(self, class_, select=None, where=None, order_by=None,
-            group_by=None, limit=None):
+    def query(self, class_, select=None, where=None, order_by=None, group_by=None, limit=None):
         with self.lock:
             table, slots = self._schema(class_)
             attr_to_type = dict(slots)
@@ -410,11 +397,9 @@ class Store(object):
             def _decode(row, columns):
                 for name, value in zip(columns, row):
                     type_ = attr_to_type.get(name, None)
-                    yield (self.deserialize(value, type_)
-                           if type_ is not None else value)
+                    yield (self.deserialize(value, type_) if type_ is not None else value)
 
-            return (RowProxy(tuple(_decode(row, columns)), columns)
-                    for row in result)
+            return (RowProxy(tuple(_decode(row, columns)), columns) for row in result)
 
     def load(self, class_, *args, **kwargs):
         with self.lock:
@@ -423,8 +408,7 @@ class Store(object):
                 del kwargs['__query__']
 
             table, slots = self._schema(class_)
-            sql = 'SELECT %s FROM %s' % (', '.join(name for name, type_
-                                                   in slots), table)
+            sql = 'SELECT %s FROM %s' % (', '.join(name for name, type_ in slots), table)
             if query:
                 if isinstance(query, types.FunctionType):
                     # Late-binding of query
@@ -439,14 +423,14 @@ class Store(object):
             else:
                 sql_args = []
             cur = self._execute(sql, sql_args)
+
             def apply(row):
                 row = zip(slots, row)
-                kwargs = {name: self.deserialize(v, type_) for (name, type_), v
-                          in row if v is not None}
+                kwargs = {name: self.deserialize(v, type_) for (name, type_), v in row if v is not None}
                 o = class_(*args, **kwargs)
                 setattr(o, self.MINIDB_ATTR, self)
-
                 return o
+
             return (x for x in (apply(row) for row in cur) if x is not None)
 
     def get(self, class_, *args, **kwargs):
@@ -481,11 +465,7 @@ class Operation(object):
         raise ValueError('Cannot determine class for query')
 
     def query(self, db, where=None, order_by=None, group_by=None, limit=None):
-        return self._get_class(self.a).query(db, self,
-                                             where=where,
-                                             order_by=order_by,
-                                             group_by=group_by,
-                                             limit=limit)
+        return self._get_class(self.a).query(db, self, where=where, order_by=order_by, group_by=group_by, limit=limit)
 
     def __floordiv__(self, other):
         if self.b is not None:
@@ -570,8 +550,7 @@ class Sequence(object):
         return Operation(self).tosql()
 
     def query(self, db, order_by=None, group_by=None, limit=None):
-        return Operation(self).query(db, order_by=order_by, group_by=group_by,
-                                     limit=limit)
+        return Operation(self).query(db, order_by=order_by, group_by=group_by, limit=limit)
 
     def __floordiv__(self, other):
         self.args.append(other)
@@ -607,18 +586,17 @@ class func(object):
 class OperatorMixin(object):
     __lt__ = lambda a, b: Operation(a, '<', b)
     __le__ = lambda a, b: Operation(a, '<=', b)
-    __eq__ = lambda a, b: Operation(a, '=', b) if b is not None \
-                          else Operation(a, 'IS NULL')
-    __ne__ = lambda a, b: Operation(a, '!=', b) if b is not None \
-                          else Operation(a, 'IS NOT NULL')
+    __eq__ = lambda a, b: Operation(a, '=', b) if b is not None else Operation(a, 'IS NULL')
+    __ne__ = lambda a, b: Operation(a, '!=', b) if b is not None else Operation(a, 'IS NOT NULL')
     __gt__ = lambda a, b: Operation(a, '>', b)
     __ge__ = lambda a, b: Operation(a, '>=', b)
 
     __call__ = lambda a, name: RenameOperation(a, name)
     tosql = lambda a: Operation(a).tosql()
-    query = lambda a, db, where=None, order_by=None, group_by=None, limit=None: \
-            Operation(a).query(db, where=where, order_by=order_by, group_by=group_by,
-                    limit=limit)
+    query = lambda a, db, where=None, order_by=None, group_by=None, limit=None: Operation(a).query(db, where=where,
+                                                                                                   order_by=order_by,
+                                                                                                   group_by=group_by,
+                                                                                                   limit=limit)
     __floordiv__ = lambda a, b: Sequence([a, b])
 
     like = lambda a, b: Operation(a, 'LIKE', b)
@@ -693,8 +671,7 @@ class Columns(object):
         self._slots = slots
 
     def __repr__(self):
-        return '<{} for {} ({})>'.format(self.__class__.__name__,
-                                         self._name, ', '.join(self._slots))
+        return '<{} for {} ({})>'.format(self.__class__.__name__, self._name, ', '.join(self._slots))
 
     def __getattr__(self, name):
         d = {k: v for k, v in _get_all_slots(self._class, include_private=True)}
@@ -733,12 +710,12 @@ class MetaModel(type):
         d['__minidb_cache__'] = weakref.WeakValueDictionary()
 
         slots = collections.OrderedDict((k, v) for k, v in d.items()
-                 if k.lower() == k and
-                 not k.startswith('__') and
-                 not isinstance(v, types.FunctionType) and
-                 not isinstance(v, property) and
-                 not isinstance(v, staticmethod) and
-                 not isinstance(v, classmethod))
+                                        if k.lower() == k and
+                                        not k.startswith('__') and
+                                        not isinstance(v, types.FunctionType) and
+                                        not isinstance(v, property) and
+                                        not isinstance(v, staticmethod) and
+                                        not isinstance(v, classmethod))
 
         keep = collections.OrderedDict((k, v) for k, v in d.items() if k not in slots)
         keep['__minidb_slots__'] = slots
@@ -758,11 +735,9 @@ class MetaModel(type):
 
 def pformat(result, color=False):
     def incolor(color_id, s):
-        return '\033[9%dm%s\033[0m' % (color_id, s) if sys.stdout.isatty() \
-                and color else s
+        return '\033[9%dm%s\033[0m' % (color_id, s) if sys.stdout.isatty() and color else s
 
-    inred, ingreen, inyellow, inblue = (functools.partial(incolor, x)
-                                        for x in range(1, 5))
+    inred, ingreen, inyellow, inblue = (functools.partial(incolor, x) for x in range(1, 5))
 
     rows = list(result)
     if not rows:
@@ -778,16 +753,11 @@ def pformat(result, color=False):
 
     s = []
     keys = rows[0].keys()
-    lengths = tuple(max(x) for x in zip(*[[len(str(column))
-                                           for column in row]
-                                          for row in [keys]+rows]))
-    s.append(' | '.join(inyellow('%-{}s'.format(length) % key)
-                        for key, length in zip(keys, lengths)))
-    s.append('-+-'.join('-'*length for length in lengths))
+    lengths = tuple(max(x) for x in zip(*[[len(str(column)) for column in row] for row in [keys] + rows]))
+    s.append(' | '.join(inyellow('%-{}s'.format(length) % key) for key, length in zip(keys, lengths)))
+    s.append('-+-'.join('-' * length for length in lengths))
     for row in rows:
-        s.append(' | '.join(colorvalue('%-{}s'.format(length) % column,
-                                        column) for column, length in
-                                        zip(row, lengths)))
+        s.append(' | '.join(colorvalue('%-{}s'.format(length) % col, col) for col, length in zip(row, lengths)))
     s.append('({} row(s))'.format(len(rows)))
     return ('\n'.join(s))
 
@@ -951,13 +921,9 @@ class Model(metaclass=MetaModel):
         return db.delete_where(cls, query)
 
     @classmethod
-    def query(cls, db, select=None, where=None, order_by=None, group_by=None,
-            limit=None):
-        return db.query(cls, select=select, where=where, order_by=order_by,
-                group_by=group_by, limit=limit)
+    def query(cls, db, select=None, where=None, order_by=None, group_by=None, limit=None):
+        return db.query(cls, select=select, where=where, order_by=order_by, group_by=group_by, limit=limit)
 
     @classmethod
-    def pquery(cls, db, select=None, where=None, order_by=None, group_by=None,
-            limit=None, color=True):
-        pprint(db.query(cls, select=select, where=where, order_by=order_by,
-                group_by=group_by, limit=limit), color)
+    def pquery(cls, db, select=None, where=None, order_by=None, group_by=None, limit=None, color=True):
+        pprint(db.query(cls, select=select, where=where, order_by=order_by, group_by=group_by, limit=limit), color)
