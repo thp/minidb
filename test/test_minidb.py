@@ -457,6 +457,31 @@ def test_delete_object():
         assert {0, 1} == {bar for (bar,) in Foo.c.bar.query(db)}
 
 
+def test_distinct():
+    class Foo(minidb.Model):
+        bar = str
+        baz = int
+
+    with minidb.Store(debug=True) as db:
+        db.register(Foo)
+
+        for i in range(2):
+            Foo(bar='hi', baz=i).save(db)
+
+        Foo(bar='ho', baz=7).save(db)
+
+        expected = {('hi',), ('ho',)}
+
+        # minidb.func.distinct(COLUMN)(NAME)
+        result = {tuple(x) for x in Foo.query(db, lambda c: minidb.func.distinct(c.bar)('foo'))}
+        eq_(result, expected)
+
+        # COLUMN.distinct(NAME)
+        result = {tuple(x) for x in Foo.query(db, Foo.c.bar.distinct('foo'))}
+        eq_(result, expected)
+
+
+
 def test_group_by_with_sum():
     class Foo(minidb.Model):
         bar = str

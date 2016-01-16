@@ -569,6 +569,7 @@ class func(object):
     max = staticmethod(lambda *args: Function('max', *args))
     min = staticmethod(lambda *args: Function('min', *args))
     sum = staticmethod(lambda *args: Function('sum', *args))
+    distinct = staticmethod(lambda *args: Function('distinct', *args))
     random = staticmethod(lambda: Function('random'))
 
     abs = staticmethod(lambda a: Function('abs', a))
@@ -605,6 +606,7 @@ class OperatorMixin(object):
     max = property(lambda a: Function('max', a))
     min = property(lambda a: Function('min', a))
     sum = property(lambda a: Function('sum', a))
+    distinct = property(lambda a: Function('distinct', a))
 
     asc = property(lambda a: Operation(a, 'ASC'))
     desc = property(lambda a: Operation(a, 'DESC'))
