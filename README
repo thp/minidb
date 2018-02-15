@@ -37,8 +37,8 @@ adds methods for working with the database):
 ...     age = int
 
 Every subclass of minidb.Model will also have a "id" attribute that is None if
-an instance is not stored in the database, or an automatically assigne value if
-it is in the database. This uniquely identifies an object in the database.
+an instance is not stored in the database, or an automatically assigned value
+if it is in the database. This uniquely identifies an object in the database.
 
 Now it's time to register our minidb.Model subclass with the store:
 
