@@ -10,7 +10,7 @@ class Person(minidb.Model):
     mail = str
     foo = int
 
-    # Not persisted (runtime-only) class attibutes start with underscore
+    # Not persisted (runtime-only) class attributes start with underscore
     _not_persisted = float
     _foo = object
 
