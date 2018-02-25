@@ -260,7 +260,7 @@ class Store(object):
             pk = getattr(o, pk_name)
             assert pk is not None
 
-            res = self._execute('DELETE FROM %s WHERE %s = ?' % (table, pk_name), [pk])
+            self._execute('DELETE FROM %s WHERE %s = ?' % (table, pk_name), [pk])
             setattr(o, pk_name, None)
 
     def _update(self, o):
