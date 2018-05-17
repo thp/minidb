@@ -27,6 +27,10 @@ parameter when creating the minidb.Store:
 
 >>> db = minidb.Store('filename.db', debug=True)
 
+Note that for persisting data into the file, you actually need to call
+db.close() to flush the changes to disk, and optionally db.commit() if you
+want to save the changes to disk without closing the database.
+
 To actually store objects, we need to subclass from minidb.Model (which takes
 care of all the behind-the-scenes magic for making your class persistable, and
 adds methods for working with the database):
