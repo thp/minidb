@@ -1,4 +1,5 @@
 import minidb
+import datetime
 
 
 class Person(minidb.Model):
@@ -64,6 +65,12 @@ class WithPayload(minidb.Model):
     payload = minidb.JSON
 
 
+class DateTimeTypes(minidb.Model):
+    just_date = datetime.date
+    just_time = datetime.time
+    date_and_time = datetime.datetime
+
+
 Person.__custom_class_attribute__.append(333)
 print(Person.__custom_class_attribute__)
 Person.cm_foo()
@@ -79,6 +86,7 @@ with minidb.Store(debug=True) as db:
     db.register(WithoutConstructor)
     db.register(AdvancedPerson)
     db.register(WithPayload)
+    db.register(DateTimeTypes)
 
     AdvancedPerson(username='advanced', mail='a@example.net').save(db)
 
@@ -256,6 +264,15 @@ with minidb.Store(debug=True) as db:
         print('foo', payload)
 
     print(next(WithPayload.c.payload.query(db)))
+
+    print('Date and time types')
+    item = DateTimeTypes(just_date=datetime.date.today(),
+                         just_time=datetime.datetime.now().time(),
+                         date_and_time=datetime.datetime.now())
+    print('saving:', item)
+    item.save(db)
+    for dtt in DateTimeTypes.load(db):
+        print('loading:', dtt)
 
 
 def cached_person_main(with_delete=None):
