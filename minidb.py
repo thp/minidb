@@ -141,7 +141,7 @@ class Store(object):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if (exc_type, exc_value, traceback) is (None, None, None):
+        if exc_type is exc_value is traceback is None:
             self.commit()
 
         self.close()
