@@ -5,7 +5,7 @@
 #    |_|_|_|_|_||_|_\__,_|_.__/
 #    simple python object store
 #
-# Copyright 2009-2010, 2014-2017 Thomas Perl <thp.io>. All rights reserved.
+# Copyright 2009-2010, 2014-2020 Thomas Perl <thp.io>. All rights reserved.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -23,7 +23,7 @@
 """A simple SQLite3-based store for Python objects"""
 
 __author__ = 'Thomas Perl <m@thp.io>'
-__version__ = '2.0.2'
+__version__ = '2.0.3'
 __url__ = 'http://thp.io/2010/minidb/'
 __license__ = 'ISC'
 
