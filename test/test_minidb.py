@@ -1,8 +1,11 @@
 import minidb
-
-from nose.tools import *
-
+import pytest
 import datetime
+
+
+def ported_eq(a, b, msg=None):
+    if not a == b:
+        raise AssertionError(msg or "%r != %r" % (a, b))
 
 
 class FieldTest(minidb.Model):
@@ -138,38 +141,38 @@ def test_loading_objects():
             assert field_test._private1 == 997
 
 
-@raises(minidb.UnknownClass)
 def test_saving_without_registration_fails():
-    with minidb.Store(debug=True) as db:
-        FieldTest(9).save(db)
+    with pytest.raises(minidb.UnknownClass):
+        with minidb.Store(debug=True) as db:
+            FieldTest(9).save(db)
 
 
-@raises(TypeError)
 def test_registering_non_subclass_of_model_fails():
     # This cannot be registered, as it's not a subclass of minidb.Model
-    class Something(object):
-        column = str
+    with pytest.raises(TypeError):
+        class Something(object):
+            column = str
 
-    with minidb.Store(debug=True) as db:
-        db.register(Something)
-        db.register(Something)
+        with minidb.Store(debug=True) as db:
+            db.register(Something)
+            db.register(Something)
 
 
-@raises(KeyError)
 def test_invalid_keyword_arguments_fails():
-    with minidb.Store(debug=True) as db:
-        db.register(FieldTest)
-        FieldTest(9, this_is_not_an_attribute=123).save(db)
+    with pytest.raises(KeyError):
+        with minidb.Store(debug=True) as db:
+            db.register(FieldTest)
+            FieldTest(9, this_is_not_an_attribute=123).save(db)
 
 
-@raises(AttributeError)
 def test_invalid_column_raises_attribute_error():
-    class HasOnlyColumnX(minidb.Model):
-        x = int
+    with pytest.raises(AttributeError):
+        class HasOnlyColumnX(minidb.Model):
+            x = int
 
-    with minidb.Store(debug=True) as db:
-        db.register(HasOnlyColumnX)
-        HasOnlyColumnX.c.y
+        with minidb.Store(debug=True) as db:
+            db.register(HasOnlyColumnX)
+            HasOnlyColumnX.c.y
 
 
 def test_json_serialization():
@@ -192,7 +195,7 @@ def test_json_field_query():
         db.register(WithJsonField)
         d = {'a': [1, True, 3.9]}
         WithJsonField(bar=d).save(db)
-        eq_(next(WithJsonField.c.bar.query(db)).bar, d)
+        ported_eq(next(WithJsonField.c.bar.query(db)).bar, d)
 
 
 def test_json_field_renamed_query():
@@ -203,7 +206,7 @@ def test_json_field_renamed_query():
         db.register(WithJsonField)
         d = {'a': [1, True, 3.9]}
         WithJsonField(bar=d).save(db)
-        eq_(next(WithJsonField.c.bar('renamed').query(db)).renamed, d)
+        ported_eq(next(WithJsonField.c.bar('renamed').query(db)).renamed, d)
 
 
 def test_field_conversion_get_object():
@@ -293,16 +296,16 @@ def test_storing_and_retrieving_bytes():
         assert query_value == BLOB
 
 
-@raises(ValueError)
 def test_get_with_multiple_value_raises_exception():
-    class Mod(minidb.Model):
-        mod = str
+    with pytest.raises(ValueError):
+        class Mod(minidb.Model):
+            mod = str
 
-    with minidb.Store(debug=True) as db:
-        db.register(Mod)
-        Mod(mod='foo').save(db)
-        Mod(mod='foo').save(db)
-        Mod.get(db, mod='foo')
+        with minidb.Store(debug=True) as db:
+            db.register(Mod)
+            Mod(mod='foo').save(db)
+            Mod(mod='foo').save(db)
+            Mod.get(db, mod='foo')
 
 
 def test_get_with_no_value_returns_none():
@@ -329,72 +332,72 @@ def test_delete_where():
         assert {2, 3, 4, 5} == {v for (v,) in DeleteWhere.c.v.query(db)}
 
 
-@raises(AttributeError)
 def test_invalid_rowproxy_access_by_attribute():
-    class Foo(minidb.Model):
-        bar = str
+    with pytest.raises(AttributeError):
+        class Foo(minidb.Model):
+            bar = str
 
-    with minidb.Store(debug=True) as db:
-        db.register(Foo)
-        Foo(bar='baz').save(db)
-        next(Foo.query(db, Foo.c.bar)).baz
+        with minidb.Store(debug=True) as db:
+            db.register(Foo)
+            Foo(bar='baz').save(db)
+            next(Foo.query(db, Foo.c.bar)).baz
 
 
-@raises(KeyError)
 def test_invalid_rowproxy_access_by_key():
-    class Foo(minidb.Model):
-        bar = str
+    with pytest.raises(KeyError):
+        class Foo(minidb.Model):
+            bar = str
 
-    with minidb.Store(debug=True) as db:
-        db.register(Foo)
-        Foo(bar='baz').save(db)
-        next(Foo.query(db, Foo.c.bar))['baz']
+        with minidb.Store(debug=True) as db:
+            db.register(Foo)
+            Foo(bar='baz').save(db)
+            next(Foo.query(db, Foo.c.bar))['baz']
 
 
-@raises(TypeError)
 def test_use_schema_without_registration_raises_typeerror():
-    with minidb.Store(debug=True) as db:
-        class Foo(minidb.Model):
-            bar = str
-        Foo.query(db)
+    with pytest.raises(TypeError):
+        with minidb.Store(debug=True) as db:
+            class Foo(minidb.Model):
+                bar = str
+            Foo.query(db)
 
 
-@raises(TypeError)
 def test_use_schema_with_nonidentity_class_raises_typeerror():
-    with minidb.Store(debug=True) as db:
-        class Foo(minidb.Model):
-            bar = str
-        db.register(Foo)
+    with pytest.raises(TypeError):
+        with minidb.Store(debug=True) as db:
+            class Foo(minidb.Model):
+                bar = str
+            db.register(Foo)
 
-        class Foo(minidb.Model):
-            bar = str
+            class Foo(minidb.Model):
+                bar = str
 
-        Foo.query(db)
+            Foo.query(db)
 
 
-@raises(TypeError)
 def test_upgrade_schema_without_upgrade_raises_typeerror():
-    with minidb.Store(debug=True) as db:
-        class Foo(minidb.Model):
-            bar = str
+    with pytest.raises(TypeError):
+        with minidb.Store(debug=True) as db:
+            class Foo(minidb.Model):
+                bar = str
 
-        db.register(Foo)
+            db.register(Foo)
 
-        class Foo(minidb.Model):
-            bar = str
-            baz = int
+            class Foo(minidb.Model):
+                bar = str
+                baz = int
 
-        db.register(Foo)
+            db.register(Foo)
 
 
-@raises(TypeError)
 def test_reregistering_class_raises_typeerror():
-    class Foo(minidb.Model):
-        bar = int
+    with pytest.raises(TypeError):
+        class Foo(minidb.Model):
+            bar = int
 
-    with minidb.Store(debug=True) as db:
-        db.register(Foo)
-        db.register(Foo)
+        with minidb.Store(debug=True) as db:
+            db.register(Foo)
+            db.register(Foo)
 
 
 def test_upgrade_schema_with_upgrade_succeeds():
@@ -411,18 +414,18 @@ def test_upgrade_schema_with_upgrade_succeeds():
         db.register(Foo, upgrade=True)
 
 
-@raises(TypeError)
 def test_upgrade_schema_with_different_type_raises_typeerror():
-    with minidb.Store(debug=True) as db:
-        class Foo(minidb.Model):
-            bar = str
+    with pytest.raises(TypeError):
+        with minidb.Store(debug=True) as db:
+            class Foo(minidb.Model):
+                bar = str
 
-        db.register(Foo)
+            db.register(Foo)
 
-        class Foo(minidb.Model):
-            bar = int
+            class Foo(minidb.Model):
+                bar = int
 
-        db.register(Foo, upgrade=True)
+            db.register(Foo, upgrade=True)
 
 
 def test_update_object():
@@ -474,11 +477,11 @@ def test_distinct():
 
         # minidb.func.distinct(COLUMN)(NAME)
         result = {tuple(x) for x in Foo.query(db, lambda c: minidb.func.distinct(c.bar)('foo'))}
-        eq_(result, expected)
+        ported_eq(result, expected)
 
         # COLUMN.distinct(NAME)
         result = {tuple(x) for x in Foo.query(db, Foo.c.bar.distinct('foo'))}
-        eq_(result, expected)
+        ported_eq(result, expected)
 
 
 
@@ -501,43 +504,43 @@ def test_group_by_with_sum():
         # minidb.func.sum(COLUMN)(NAME)
         result = {tuple(x) for x in Foo.query(db, lambda c: c.bar //
                   minidb.func.sum(c.baz)('sum'), group_by=lambda c: c.bar)}
-        eq_(result, expected)
+        ported_eq(result, expected)
 
         # COLUMN.sum(NAME)
         result = {tuple(x) for x in Foo.query(db, lambda c: c.bar //
                   c.baz.sum('sum'), group_by=lambda c: c.bar)}
-        eq_(result, expected)
+        ported_eq(result, expected)
 
 
-@raises(ValueError)
 def test_save_without_db_raises_valueerror():
-    class Foo(minidb.Model):
-        bar = int
+    with pytest.raises(ValueError):
+        class Foo(minidb.Model):
+            bar = int
 
-    Foo(bar=99).save()
+        Foo(bar=99).save()
 
 
-@raises(ValueError)
 def test_delete_without_db_raises_valueerror():
-    class Foo(minidb.Model):
-        bar = int
+    with pytest.raises(ValueError):
+        class Foo(minidb.Model):
+            bar = int
 
-    Foo(bar=99).delete()
+        Foo(bar=99).delete()
 
 
-@raises(KeyError)
 def test_double_delete_without_id_raises_valueerror():
-    class Foo(minidb.Model):
-        bar = str
+    with pytest.raises(KeyError):
+        class Foo(minidb.Model):
+            bar = str
 
-    with minidb.Store(debug=True) as db:
-        db.register(Foo)
-        a = Foo(bar='hello')
-        a.save(db)
-        assert a.id is not None
-        a.delete()
-        assert a.id is None
-        a.delete()
+        with minidb.Store(debug=True) as db:
+            db.register(Foo)
+            a = Foo(bar='hello')
+            a.save(db)
+            assert a.id is not None
+            a.delete()
+            assert a.id is None
+            a.delete()
 
 
 def test_default_values_are_set_if_none():
@@ -549,10 +552,10 @@ def test_default_values_are_set_if_none():
 
     with minidb.Store(debug=True) as db:
         f = Foo()
-        eq_(f.name, 'Bob')
+        ported_eq(f.name, 'Bob')
 
         f = Foo(name='John')
-        eq_(f.name, 'John')
+        ported_eq(f.name, 'John')
 
 
 def test_default_values_with_callable():
@@ -569,16 +572,16 @@ def test_default_values_with_callable():
 
     with minidb.Store(debug=True) as db:
         f = Foo()
-        eq_(f.name, 'Bob')
-        eq_(f.email, 'Bob@example.com')
+        ported_eq(f.name, 'Bob')
+        ported_eq(f.email, 'Bob@example.com')
 
         f = Foo(name='John')
-        eq_(f.name, 'John')
-        eq_(f.email, 'John@example.com')
+        ported_eq(f.name, 'John')
+        ported_eq(f.email, 'John@example.com')
 
         f = Foo(name='Joe', email='joe@example.net')
-        eq_(f.name, 'Joe')
-        eq_(f.email, 'joe@example.net')
+        ported_eq(f.name, 'Joe')
+        ported_eq(f.email, 'joe@example.net')
 
 
 def test_storing_and_retrieving_datetime():
