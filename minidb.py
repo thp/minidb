@@ -23,7 +23,7 @@
 """A simple SQLite3-based store for Python objects"""
 
 __author__ = 'Thomas Perl <m@thp.io>'
-__version__ = '2.0.3'
+__version__ = '2.0.4'
 __url__ = 'http://thp.io/2010/minidb/'
 __license__ = 'ISC'
 
