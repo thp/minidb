@@ -3,11 +3,6 @@ import pytest
 import datetime
 
 
-def ported_eq(a, b, msg=None):
-    if not a == b:
-        raise AssertionError(msg or "%r != %r" % (a, b))
-
-
 class FieldTest(minidb.Model):
     CONSTANT = 123
 
@@ -195,7 +190,7 @@ def test_json_field_query():
         db.register(WithJsonField)
         d = {'a': [1, True, 3.9]}
         WithJsonField(bar=d).save(db)
-        ported_eq(next(WithJsonField.c.bar.query(db)).bar, d)
+        assert next(WithJsonField.c.bar.query(db)).bar == d
 
 
 def test_json_field_renamed_query():
@@ -206,7 +201,7 @@ def test_json_field_renamed_query():
         db.register(WithJsonField)
         d = {'a': [1, True, 3.9]}
         WithJsonField(bar=d).save(db)
-        ported_eq(next(WithJsonField.c.bar('renamed').query(db)).renamed, d)
+        assert next(WithJsonField.c.bar('renamed').query(db)).renamed == d
 
 
 def test_field_conversion_get_object():
@@ -477,11 +472,11 @@ def test_distinct():
 
         # minidb.func.distinct(COLUMN)(NAME)
         result = {tuple(x) for x in Foo.query(db, lambda c: minidb.func.distinct(c.bar)('foo'))}
-        ported_eq(result, expected)
+        assert result == expected
 
         # COLUMN.distinct(NAME)
         result = {tuple(x) for x in Foo.query(db, Foo.c.bar.distinct('foo'))}
-        ported_eq(result, expected)
+        assert result == expected
 
 
 
@@ -504,12 +499,12 @@ def test_group_by_with_sum():
         # minidb.func.sum(COLUMN)(NAME)
         result = {tuple(x) for x in Foo.query(db, lambda c: c.bar //
                   minidb.func.sum(c.baz)('sum'), group_by=lambda c: c.bar)}
-        ported_eq(result, expected)
+        assert result == expected
 
         # COLUMN.sum(NAME)
         result = {tuple(x) for x in Foo.query(db, lambda c: c.bar //
                   c.baz.sum('sum'), group_by=lambda c: c.bar)}
-        ported_eq(result, expected)
+        assert result == expected
 
 
 def test_save_without_db_raises_valueerror():
@@ -552,10 +547,10 @@ def test_default_values_are_set_if_none():
 
     with minidb.Store(debug=True) as db:
         f = Foo()
-        ported_eq(f.name, 'Bob')
+        assert f.name == 'Bob'
 
         f = Foo(name='John')
-        ported_eq(f.name, 'John')
+        assert f.name == 'John'
 
 
 def test_default_values_with_callable():
@@ -572,16 +567,16 @@ def test_default_values_with_callable():
 
     with minidb.Store(debug=True) as db:
         f = Foo()
-        ported_eq(f.name, 'Bob')
-        ported_eq(f.email, 'Bob@example.com')
+        assert f.name == 'Bob'
+        assert f.email == 'Bob@example.com'
 
         f = Foo(name='John')
-        ported_eq(f.name, 'John')
-        ported_eq(f.email, 'John@example.com')
+        assert f.name == 'John'
+        assert f.email == 'John@example.com'
 
         f = Foo(name='Joe', email='joe@example.net')
-        ported_eq(f.name, 'Joe')
-        ported_eq(f.email, 'joe@example.net')
+        assert f.name == 'Joe'
+        assert f.email == 'joe@example.net'
 
 
 def test_storing_and_retrieving_datetime():
