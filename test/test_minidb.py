@@ -479,7 +479,6 @@ def test_distinct():
         assert result == expected
 
 
-
 def test_group_by_with_sum():
     class Foo(minidb.Model):
         bar = str
@@ -545,12 +544,11 @@ def test_default_values_are_set_if_none():
         class __minidb_defaults__:
             name = 'Bob'
 
-    with minidb.Store(debug=True) as db:
-        f = Foo()
-        assert f.name == 'Bob'
+    f = Foo()
+    assert f.name == 'Bob'
 
-        f = Foo(name='John')
-        assert f.name == 'John'
+    f = Foo(name='John')
+    assert f.name == 'John'
 
 
 def test_default_values_with_callable():
@@ -565,18 +563,17 @@ def test_default_values_with_callable():
             name = lambda o: 'Bob'
             email = lambda o: o.name + '@example.com'
 
-    with minidb.Store(debug=True) as db:
-        f = Foo()
-        assert f.name == 'Bob'
-        assert f.email == 'Bob@example.com'
+    f = Foo()
+    assert f.name == 'Bob'
+    assert f.email == 'Bob@example.com'
 
-        f = Foo(name='John')
-        assert f.name == 'John'
-        assert f.email == 'John@example.com'
+    f = Foo(name='John')
+    assert f.name == 'John'
+    assert f.email == 'John@example.com'
 
-        f = Foo(name='Joe', email='joe@example.net')
-        assert f.name == 'Joe'
-        assert f.email == 'joe@example.net'
+    f = Foo(name='Joe', email='joe@example.net')
+    assert f.name == 'Joe'
+    assert f.email == 'joe@example.net'
 
 
 def test_storing_and_retrieving_datetime():

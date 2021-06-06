@@ -22,6 +22,19 @@
 
 """A simple SQLite3-based store for Python objects"""
 
+import sqlite3
+import threading
+import inspect
+import functools
+import types
+import collections
+import weakref
+import sys
+import json
+import datetime
+import logging
+
+
 __author__ = 'Thomas Perl <m@thp.io>'
 __version__ = '2.0.4'
 __url__ = 'http://thp.io/2010/minidb/'
@@ -48,19 +61,6 @@ __all__ = [
 
 DEBUG_OBJECT_CACHE = False
 CONVERTERS = {}
-
-
-import sqlite3
-import threading
-import inspect
-import functools
-import types
-import collections
-import weakref
-import sys
-import json
-import datetime
-import logging
 
 
 logger = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ class RowProxy(object):
         if isinstance(key, str):
             try:
                 index = self._keys.index(key)
-            except ValueError as ve:
+            except ValueError:
                 raise KeyError(key)
 
             return self._row[index]
