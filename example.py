@@ -302,4 +302,5 @@ def cached_person_main(with_delete=None):
         print('p._inst =', repr(p._inst))
     minidb.DEBUG_OBJECT_CACHE = debug_object_cache
 
+
 cached_person_main()
