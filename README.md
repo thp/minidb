@@ -1,6 +1,8 @@
 minidb: simple python object store
 ==================================
 
+[![PyTest](https://github.com/thp/minidb/actions/workflows/pytest.yaml/badge.svg)](https://github.com/thp/minidb/actions/workflows/pytest.yaml)
+
 Store Python objects in SQLite 3. Concise, pythonic API. Fun to use.
 
 
