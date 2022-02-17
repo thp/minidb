@@ -33,6 +33,13 @@ Note that for persisting data into the file, you actually need to call
 db.close() to flush the changes to disk, and optionally db.commit() if you
 want to save the changes to disk without closing the database.
 
+By default, `minidb` executes `VACUUM` on the SQLite database on close. You
+can opt-out of this behaviour by passing `vacuum_on_close=False` to the
+`minidb.Store` constructor. You can manually execute a `VACUUM` by calling
+`.vacuum()` on the `minidb.Store` object, this helps reduce the file size
+in case you delete many objects at once. See the
+[SQLite VACUUM docs](https://www.sqlite.org/lang_vacuum.html) for details.
+
 To actually store objects, we need to subclass from minidb.Model (which takes
 care of all the behind-the-scenes magic for making your class persistable, and
 adds methods for working with the database):

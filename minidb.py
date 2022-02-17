@@ -130,10 +130,11 @@ class Store(object):
     PRIMARY_KEY = ('id', int)
     MINIDB_ATTR = '_minidb'
 
-    def __init__(self, filename=':memory:', debug=False, smartupdate=False):
+    def __init__(self, filename=':memory:', debug=False, smartupdate=False, vacuum_on_close=True):
         self.db = sqlite3.connect(filename, check_same_thread=False)
         self.debug = debug
         self.smartupdate = smartupdate
+        self.vacuum_on_close = vacuum_on_close
         self.registered = {}
         self.lock = threading.RLock()
 
@@ -165,10 +166,15 @@ class Store(object):
         with self.lock:
             self.db.commit()
 
+    def vacuum(self):
+        with self.lock:
+            self._execute('VACUUM')
+
     def close(self):
         with self.lock:
             self.db.isolation_level = None
-            self._execute('VACUUM')
+            if self.vacuum_on_close:
+                self._execute('VACUUM')
             self.db.close()
 
     def _ensure_schema(self, table, slots):
