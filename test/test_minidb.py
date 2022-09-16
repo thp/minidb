@@ -646,3 +646,19 @@ def test_custom_converter():
                                         where=lambda c: c.id == player_id))
         assert type(query_value.position) == Point
         assert (query_value.position.x, query_value.position.y) == (p.x, p.y)
+
+
+def test_delete_all():
+    class Thing(minidb.Model):
+        bla = str
+        blubb = int
+
+    with minidb.Store(debug=True) as db:
+        db.register(Thing)
+
+        db.save(Thing(bla='a', blubb=123))
+        db.save(Thing(bla='c', blubb=456))
+        assert db.count_rows(Thing) == 2
+
+        db.delete_all(Thing)
+        assert db.count_rows(Thing) == 0

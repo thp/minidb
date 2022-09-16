@@ -243,6 +243,9 @@ with minidb.Store(debug=True) as db:
     print('Select Star')
     print(list(Person.query(db, minidb.literal('*'))))
 
+    print('Count items')
+    print(db.count_rows(Person))
+
     print('Group By')
     print(list(Person.query(db, Person.c.username // Person.c.id.count, group_by=Person.c.username)))
 
@@ -257,6 +260,12 @@ with minidb.Store(debug=True) as db:
 
     print('Pretty-Querying with default star-select')
     Person.pquery(db)
+
+    print('Delete all items')
+    db.delete_all(Person)
+
+    print('Count again after delete')
+    print(db.count_rows(Person))
 
     print('With payload (JSON)')
     WithPayload(payload={'a': [1] * 3}).save(db)

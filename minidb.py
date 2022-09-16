@@ -335,6 +335,12 @@ class Store(object):
             sql = 'DELETE FROM %s WHERE %s' % (table, ssql)
             return self._execute(sql, args).rowcount
 
+    def delete_all(self, class_):
+        self.delete_where(class_, literal('1'))
+
+    def count_rows(self, class_):
+        return next(self.query(class_, func.count(literal('*'))))[0]
+
     def query(self, class_, select=None, where=None, order_by=None, group_by=None, limit=None):
         with self.lock:
             table, slots = self._schema(class_)
