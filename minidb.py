@@ -36,7 +36,7 @@ import logging
 
 
 __author__ = 'Thomas Perl <m@thp.io>'
-__version__ = '2.0.6'
+__version__ = '2.0.7'
 __url__ = 'http://thp.io/2010/minidb/'
 __license__ = 'ISC'
 
