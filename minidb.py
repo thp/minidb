@@ -701,7 +701,12 @@ def model_init(self, *args, **kwargs):
 
     # Call redirected constructor
     if '__minidb_init__' in self.__class__.__dict__:
-        getattr(self, '__minidb_init__')(*args)
+        # Any keyword arguments that are not the primary key ("id") or any of the slots
+        # will be passed to the __init__() function of the class, all other attributes
+        # will have already been initialized/set by the time __init__() is called.
+        kwargs = {k: v for k, v in kwargs.items()
+                  if k != Store.PRIMARY_KEY[0] and k not in self.__class__.__minidb_slots__}
+        getattr(self, '__minidb_init__')(*args, **kwargs)
 
 
 class MetaModel(type):
