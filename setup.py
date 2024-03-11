@@ -5,7 +5,7 @@
 
 import os
 import re
-from distutils.core import setup
+from setuptools import setup
 
 dirname = os.path.dirname(os.path.abspath(__file__))
 src = open(os.path.join(dirname, '{}.py'.format(__doc__))).read()
