@@ -264,10 +264,10 @@ def test_storing_and_retrieving_floats():
         db.register(FloatModel)
         float_id = FloatModel(value=3.1415).save(db).id
         get_value = FloatModel.get(db, id=float_id).value
-        assert type(get_value) == float
+        assert isinstance(get_value, float)
         assert get_value == 3.1415
         query_value = next(FloatModel.c.value.query(db, where=lambda c: c.id == float_id)).value
-        assert type(query_value) == float
+        assert isinstance(query_value, float)
         assert query_value == 3.1415
 
 
@@ -284,10 +284,10 @@ def test_storing_and_retrieving_bytes():
         db.register(BytesModel)
         bytes_id = BytesModel(value=BLOB).save(db).id
         get_value = BytesModel.get(db, id=bytes_id).value
-        assert type(get_value) == bytes
+        assert isinstance(get_value, bytes)
         assert get_value == BLOB
         query_value = next(BytesModel.c.value.query(db, where=lambda c: c.id == bytes_id)).value
-        assert type(query_value) == bytes
+        assert isinstance(query_value, bytes)
         assert query_value == BLOB
 
 
@@ -590,19 +590,19 @@ def test_storing_and_retrieving_datetime():
         db.register(DateTimeModel)
         datetime_id = DateTimeModel(dt=DT_NOW, da=D_TODAY, tm=T_NOW).save(db).id
         get_value = DateTimeModel.get(db, id=datetime_id)
-        assert type(get_value.dt) == datetime.datetime
+        assert isinstance(get_value.dt, datetime.datetime)
         assert get_value.dt == DT_NOW
-        assert type(get_value.da) == datetime.date
+        assert isinstance(get_value.da, datetime.date)
         assert get_value.da == D_TODAY
-        assert type(get_value.tm) == datetime.time
+        assert isinstance(get_value.tm, datetime.time)
         assert get_value.tm == T_NOW
         query_value = next(DateTimeModel.query(db, lambda c: c.dt // c.da // c.tm,
                                                where=lambda c: c.id == datetime_id))
-        assert type(query_value.dt) == datetime.datetime
+        assert isinstance(query_value.dt, datetime.datetime)
         assert query_value.dt == DT_NOW
-        assert type(query_value.da) == datetime.date
+        assert isinstance(query_value.da, datetime.date)
         assert query_value.da == D_TODAY
-        assert type(query_value.tm) == datetime.time
+        assert isinstance(query_value.tm, datetime.time)
         assert query_value.tm == T_NOW
 
 
@@ -640,11 +640,11 @@ def test_custom_converter():
         p = Point(1.12, 5.99)
         player_id = Player(name='Foo', position=p).save(db).id
         get_value = Player.get(db, id=player_id)
-        assert type(get_value.position) == Point
+        assert isinstance(get_value.position, Point)
         assert (get_value.position.x, get_value.position.y) == (p.x, p.y)
         query_value = next(Player.query(db, lambda c: c.position,
                                         where=lambda c: c.id == player_id))
-        assert type(query_value.position) == Point
+        assert isinstance(query_value.position, Point)
         assert (query_value.position.x, query_value.position.y) == (p.x, p.y)
 
 
