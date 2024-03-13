@@ -1,3 +1,4 @@
+import concurrent.futures
 import minidb
 import pytest
 import datetime
@@ -662,3 +663,29 @@ def test_delete_all():
 
         db.delete_all(Thing)
         assert db.count_rows(Thing) == 0
+
+def test_threaded_query():
+    class Thing(minidb.Model):
+        s = str
+        i = int
+
+    with minidb.Store(debug=True, vacuum_on_close=False) as db:
+        db.register(Thing)
+
+        for i in range(100):
+            db.save(Thing(s=str(i), i=i))
+
+        def query(i):
+            things = list(Thing.query(db, Thing.c.s // Thing.c.i, where=Thing.c.i==i))
+            assert len(things) == 1
+
+            thing = things[0]
+            assert thing is not None
+            assert thing.s == str(i)
+            assert thing.i == i
+
+            return i
+
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
+        # Wrap in list to resolve all the futures
+        list(executor.map(query, range(100)))
