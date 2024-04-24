@@ -664,6 +664,7 @@ def test_delete_all():
         db.delete_all(Thing)
         assert db.count_rows(Thing) == 0
 
+
 def test_threaded_query():
     class Thing(minidb.Model):
         s = str
@@ -676,7 +677,7 @@ def test_threaded_query():
             db.save(Thing(s=str(i), i=i))
 
         def query(i):
-            things = list(Thing.query(db, Thing.c.s // Thing.c.i, where=Thing.c.i==i))
+            things = list(Thing.query(db, Thing.c.s // Thing.c.i, where=Thing.c.i == i))
             assert len(things) == 1
 
             thing = things[0]
