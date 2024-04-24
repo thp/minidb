@@ -412,7 +412,7 @@ class Store(object):
                     type_ = attr_to_type.get(name, None)
                     yield (self.deserialize(value, type_) if type_ is not None else value)
 
-            return (RowProxy(tuple(_decode(row, columns)), columns) for row in result)
+            return (RowProxy(tuple(_decode(row, columns)), columns) for row in list(result))
 
     def load(self, class_, *args, **kwargs):
         with self.lock:
